@@ -1,4 +1,5 @@
 let currentModhash = null;
+let currentUserData = null;
 
 (async function initClassicReddit() {
   if (/^\/(chat|settings|poll|mod|message)/.test(window.location.pathname)) {
@@ -11,6 +12,8 @@ let currentModhash = null;
   // 1. Instantly wait for body and display the loading spinner
   await waitForBody();
   document.body.innerHTML = `<div id="classic-loading">loading classic reddit</div>`;
+
+  currentUserData = await fetchRedditUser();
 
   // Intercept Submission Page Route
   if (window.location.pathname.startsWith('/submit')) {
@@ -27,8 +30,19 @@ let currentModhash = null;
     return;
   }
 
-  const path = pathname.replace(/\/\$/, '') || '/hot';
-  const jsonUrl = `${window.location.origin}${path}.json${window.location.search}`;
+  // Robust Path & Sort Mapping
+  let jsonUrl = '';
+  const cleanPath = pathname.replace(/\/\$/, '');
+  const search = window.location.search;
+
+  if (cleanPath === '' || cleanPath === '/hot') {
+    jsonUrl = `${window.location.origin}/hot.json${search}`;
+  } else if (['/best', '/new', '/rising', '/controversial', '/top'].includes(cleanPath)) {
+    jsonUrl = `${window.location.origin}${cleanPath}.json${search}`;
+  } else {
+    jsonUrl = `${window.location.origin}${cleanPath}.json${search}`;
+  }
+
   const subName = getSubredditName();
 
   try {
@@ -71,6 +85,28 @@ function waitForBody() {
   });
 }
 
+async function fetchRedditUser() {
+  try {
+    const res = await fetch('https://www.reddit.com/api/v1/me.json', {
+      credentials: 'include',
+      headers: { 'Accept': 'application/json' }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.name) {
+        localStorage.setItem('classic_reddit_username', data.name);
+        return data;
+      }
+    }
+  } catch (e) {}
+
+  const cachedName = localStorage.getItem('classic_reddit_username');
+  if (cachedName) {
+    return { name: cachedName, total_karma: 0, link_karma: 0, comment_karma: 0 };
+  }
+  return null;
+}
+
 function purgeShredditStyles() {
   document.head.querySelectorAll('link[rel="stylesheet"], style:not(#subreddit-custom-css)').forEach(el => el.remove());
 }
@@ -97,38 +133,60 @@ function getSubredditName() {
 
 function getHeaderHTML() {
   const parts = window.location.pathname.split('/').filter(Boolean);
-  const subName = parts[0] === 'r' && parts[1] ? parts[1] : 'FRONT';
-  const subLink = subName === 'FRONT' ? '/' : '/r/' + subName;
-  const currentSort = parts[2] || 'hot';
+  const subName = parts[0] === 'r' && parts[1] ? parts[1] : 'HOME';
+  const subLink = subName === 'HOME' ? '/' : '/r/' + subName;
+  const currentSort = parts[2] || parts[0] || 'hot';
 
-  const isHot = currentSort === 'hot' ? 'selected' : '';
+  const isBest = currentSort === 'best' ? 'selected' : '';
+  const isHot = currentSort === 'hot' || currentSort === '' ? 'selected' : '';
   const isNew = currentSort === 'new' ? 'selected' : '';
   const isRising = currentSort === 'rising' ? 'selected' : '';
+  const isControversial = currentSort === 'controversial' ? 'selected' : '';
   const isTop = currentSort === 'top' ? 'selected' : '';
+  const isWiki = currentSort === 'wiki' ? 'selected' : '';
 
-  return '<div id="sr-header-area">' +
-           '<div class="sr-list">' +
-             '<a href="/">FRONT</a><span class="sep">-</span>' +
-             '<a href="/r/all">ALL</a><span class="sep">-</span>' +
-             '<a href="/r/popular">POPULAR</a><span class="sep">-</span>' +
-             '<a href="/saved">SAVED</a>' +
-           '</div>' +
-         '</div>' +
-         '<div id="header">' +
-           '<div id="header-bottom-left">' +
-             '<a id="header-img" href="/">reddit.com</a>' +
-             '<span class="pagename"><a href="' + subLink + '">' + subName + '</a></span>' +
-             '<ul class="tabmenu">' +
-               '<li class="' + isHot + '"><a href="' + subLink + '/hot">hot</a></li>' +
-               '<li class="' + isNew + '"><a href="' + subLink + '/new">new</a></li>' +
-               '<li class="' + isRising + '"><a href="' + subLink + '/rising">rising</a></li>' +
-               '<li class="' + isTop + '"><a href="' + subLink + '/top">top</a></li>' +
-             '</ul>' +
-           '</div>' +
-           '<div id="header-bottom-right">' +
-             '<a href="/submit" class="submit-link">submit a new link</a>' +
-           '</div>' +
-         '</div>';
+  const username = currentUserData?.name || 'login';
+  const totalKarma = currentUserData ? ((currentUserData.total_karma || (currentUserData.link_karma + currentUserData.comment_karma)) || 0).toLocaleString() : '0';
+  const userLink = currentUserData ? `/user/${username}` : '/login';
+
+  return `
+    <div id="sr-header-area">
+      <div class="sr-list">
+        <span class="dropdown-title">MY SUBREDDITS</span><span class="sep">-</span>
+        <a href="/">HOME</a><span class="sep">-</span>
+        <a href="/r/popular">POPULAR</a><span class="sep">-</span>
+        <a href="/r/all">ALL</a><span class="sep">-</span>
+        <a href="/saved">SAVED</a>
+      </div>
+      <div class="user-header-right">
+        <span class="user-user"><a href="${userLink}">${username}</a></span>
+        <span class="user-karma" title="link and comment karma">(${totalKarma})</span>
+        <a href="/message/inbox/" id="mail-count" class="mail" title="Messages">✉</a>
+        <span class="separator">|</span>
+        <a href="https://www.reddit.com/prefs/">preferences</a>
+        <span class="separator">|</span>
+        <a href="https://www.reddit.com/logout">logout</a>
+      </div>
+    </div>
+    <div id="header">
+      <div id="header-bottom-left">
+        <a id="header-img" href="/">reddit</a>
+        <ul class="tabmenu">
+          <li class="${isBest}"><a href="${subLink === '/' ? '/best' : subLink + '/best'}">best</a></li>
+          <li class="${isHot}"><a href="${subLink === '/' ? '/' : subLink + '/hot'}">hot</a></li>
+          <li class="${isNew}"><a href="${subLink === '/' ? '/new' : subLink + '/new'}">new</a></li>
+          <li class="${isRising}"><a href="${subLink === '/' ? '/rising' : subLink + '/rising'}">rising</a></li>
+          <li class="${isControversial}"><a href="${subLink === '/' ? '/controversial' : subLink + '/controversial'}">controversial</a></li>
+          <li class="${isTop}"><a href="${subLink === '/' ? '/top' : subLink + '/top'}">top</a></li>
+          <li class="${isWiki}"><a href="${subLink === '/' ? '/wiki' : subLink + '/wiki'}">wiki</a></li>
+        </ul>
+      </div>
+      <div id="header-bottom-right">
+        <a href="/submit" class="pref-lang">Submit a new link</a>
+        <a href="/submit?selftext=true" class="pref-lang" style="margin-left: 5px;">Submit a new text post</a>
+      </div>
+    </div>
+  `;
 }
 
 function buildSidebarHTML(sub) {
@@ -294,7 +352,7 @@ function buildPostHTML(post, rank, isCommentPage) {
                        '<audio preload="metadata" id="audio-' + post.id + '" src="' + audioUrl + '"></audio>' +
                      '</div>';
   } else {
-    const isDirectImage = post.post_hint === 'image' || /\.(jpg|jpeg|png|gif|webp)\$/i.test(post.url);
+    const isDirectImage = post.post_hint === 'image' || /\.(jpg|jpeg|png|gif|webp)$/i.test(post.url);
     if (isDirectImage) {
       hasExpando = true;
       expandoContent = '<a href="' + post.url + '" target="_blank"><img class="expando-img" src="' + post.url + '" /></a>';
@@ -303,16 +361,27 @@ function buildPostHTML(post, rank, isCommentPage) {
 
   const expandoBtn = hasExpando && !isCommentPage ? '<div class="expando-button" data-id="' + post.id + '" title="Toggle preview">[+]</div>' : '';
   const thumbUrl = (post.thumbnail && post.thumbnail.startsWith('http')) ? post.thumbnail : null;
-  const thumbHTML = thumbUrl 
-    ? '<a class="thumbnail" href="' + (post.is_self ? post.permalink : post.url) + '"><img src="' + thumbUrl + '" width="70" height="50" alt=""></a>'
-    : '<a class="thumbnail default-thumb" href="' + post.permalink + '">' + (post.is_self ? 'self' : 'link') + '</a>';
+  
+  // If post is NSFW and thumbnail is blurred/hidden by default, show classic thumbnail override
+  let thumbHTML = '';
+  if (post.over_18 && !thumbUrl) {
+    thumbHTML = '<a class="thumbnail nsfw-thumb" href="' + post.permalink + '">18+</a>';
+  } else if (thumbUrl) {
+    thumbHTML = '<a class="thumbnail" href="' + (post.is_self ? post.permalink : post.url) + '"><img src="' + thumbUrl + '" width="70" height="50" alt=""></a>';
+  } else {
+    thumbHTML = '<a class="thumbnail default-thumb" href="' + post.permalink + '">' + (post.is_self ? 'self' : 'link') + '</a>';
+  }
+
+  // --- NSFW 18+ BADGE & BLUR LOGIC ---
+  const nsfwBadge = post.over_18 ? '<span class="nsfw-stamp">18+</span>' : '';
+  const nsfwClass = post.over_18 ? 'over-18' : '';
 
   const flairHTML = post.link_flair_text ? '<span class="linkflairlabel">' + post.link_flair_text + '</span>' : '';
   const rankHTML = rank ? '<span class="rank">' + rank + '</span>' : '';
   const stickiedClass = post.stickied ? 'stickied' : '';
   const targetUrl = post.is_self ? post.permalink : post.url;
 
-  return '<div class="thing ' + stickiedClass + '" id="thing_' + post.name + '">' +
+  return '<div class="thing ' + stickiedClass + ' ' + nsfwClass + '" id="thing_' + post.name + '">' +
            rankHTML +
            '<div class="midcol ' + voteClass + '" data-score="' + post.score + '">' +
              '<div class="arrow up" data-fullname="' + post.name + '" data-dir="1">▲</div>' +
@@ -322,6 +391,7 @@ function buildPostHTML(post, rank, isCommentPage) {
            thumbHTML +
            '<div class="entry">' +
              '<p class="title">' +
+               nsfwBadge +
                flairHTML +
                '<a class="title-link" href="' + targetUrl + '">' + post.title + '</a>' +
                '<span class="domain">(<a href="/domain/' + post.domain + '">' + post.domain + '</a>)</span>' +
@@ -332,7 +402,11 @@ function buildPostHTML(post, rank, isCommentPage) {
                  '<p class="tagline">submitted ' + timeAgo(post.created_utc) + ' by <a href="/user/' + post.author + '" class="author">' + post.author + '</a> to <a href="/r/' + post.subreddit + '" class="subreddit">r/' + post.subreddit + '</a></p>' +
                  '<ul class="flat-list buttons">' +
                    '<li class="first"><a href="' + post.permalink + '" class="comments">' + post.num_comments + ' comments</a></li>' +
-                   '<li><a href="' + post.url + '" target="_blank">share</a></li>' +
+                   '<li><a href="javascript:void(0)" class="share-button">share</a></li>' +
+                   '<li><a href="javascript:void(0)" class="save-button" data-fullname="' + post.name + '">save</a></li>' +
+                   '<li><a href="javascript:void(0)" class="hide-button" data-fullname="' + post.name + '">hide</a></li>' +
+                   '<li><a href="javascript:void(0)" class="report-button">report</a></li>' +
+                   '<li><a href="javascript:void(0)" class="crosspost-button">crosspost</a></li>' +
                  '</ul>' +
                '</div>' +
              '</div>' +
@@ -510,6 +584,27 @@ function attachInteractiveListeners() {
     });
   });
 
+  document.querySelectorAll('.hide-button').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const thing = e.target.closest('.thing');
+      const fullname = btn.dataset.fullname;
+      if (fullname) {
+        await hidePostAPI(fullname);
+        thing.style.display = 'none';
+      }
+    });
+  });
+
+  document.querySelectorAll('.save-button').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const fullname = btn.dataset.fullname;
+      if (fullname) {
+        const success = await savePostAPI(fullname);
+        if (success) btn.textContent = btn.textContent === 'save' ? 'unsave' : 'save';
+      }
+    });
+  });
+
   document.querySelectorAll('.arrow').forEach(arrow => {
     arrow.addEventListener('click', async () => {
       const midcol = arrow.closest('.midcol');
@@ -536,6 +631,25 @@ function attachInteractiveListeners() {
   });
 
   attachVideoSyncListeners();
+}
+
+async function hidePostAPI(fullname) {
+  const uh = currentModhash || getCookie('csrf_token');
+  if (!uh) return;
+  const bodyParams = new URLSearchParams({ id: fullname, uh: uh });
+  try {
+    await fetch('/api/hide', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, credentials: 'include', body: bodyParams.toString() });
+  } catch (err) { console.error("Hide failed", err); }
+}
+
+async function savePostAPI(fullname) {
+  const uh = currentModhash || getCookie('csrf_token');
+  if (!uh) return false;
+  const bodyParams = new URLSearchParams({ id: fullname, uh: uh });
+  try {
+    const res = await fetch('/api/save', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, credentials: 'include', body: bodyParams.toString() });
+    return res.ok;
+  } catch (err) { return false; }
 }
 
 async function sendCommentAPI(thingId, text) {
