@@ -61,7 +61,7 @@ The selected keyboard row (`.thing.selected`, `.comment.selected`) gets a `#f8f9
 
 - Expando body (`.usertext-body.md-box`): `#fafafa` background, 1px `#336699` border, 4px radius, 5px 10px padding.
 - Sidebar titlebox: white, 1px `#d0d0d0` border.
-- Submit form: max-width 600px, `#fafafa`, 1px `#d0d0d0` border, 15px padding. Fields are full width with a `#808080` border.
+- Submit form: white panel with a `#c5d9ef` border, `#eef6ff` round fields, and a `#fff8dc` note. Link and text are tabs on that panel. The submit button is a plain gray control.
 - Reply box: max-width 600px, `#336699` border.
 - Search field: full sidebar width, `#808080` border.
 - Flair (`.linkflairlabel`): 10px, `#f5f5f5` fill, `#d0d0d0` border, `#555555` text.

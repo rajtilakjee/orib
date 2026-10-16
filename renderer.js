@@ -16,7 +16,7 @@ let currentUserData = null;
   currentUserData = await fetchRedditUser();
 
   // Intercept Submission Page Route
-  if (window.location.pathname.startsWith('/submit')) {
+  if (isSubmitRoute(window.location.pathname)) {
     purgeShredditStyles();
     renderSubmitPage();
     return;
@@ -30,18 +30,17 @@ let currentUserData = null;
     return;
   }
 
-  // Robust Path & Sort Mapping
-  let jsonUrl = '';
-  const cleanPath = pathname.replace(/\/\$/, '');
   const search = window.location.search;
 
-  if (cleanPath === '' || cleanPath === '/hot') {
-    jsonUrl = `${window.location.origin}/hot.json${search}`;
-  } else if (['/best', '/new', '/rising', '/controversial', '/top'].includes(cleanPath)) {
-    jsonUrl = `${window.location.origin}${cleanPath}.json${search}`;
-  } else {
-    jsonUrl = `${window.location.origin}${cleanPath}.json${search}`;
+  if (/^\/media\/?$/.test(pathname)) {
+    purgeShredditStyles();
+    document.documentElement.id = "classic-reddit-ready";
+    renderMediaPage(new URLSearchParams(search).get('url'));
+    return;
   }
+
+  const jsonUrl = buildListingUrl(pathname, search);
+  const requestedPostId = commentIdFromPath(pathname);
 
   const subName = getSubredditName();
 
@@ -55,17 +54,25 @@ let currentUserData = null;
 
     const [rawData, subAbout] = await Promise.all([mainPromise, sidebarPromise]);
     const sidebarData = subAbout?.data || null;
+    const thread = requestedPostId ? postFromPayload(rawData, requestedPostId) : null;
+
+    if (requestedPostId && !thread) {
+      document.documentElement.id = "classic-bypass";
+      return;
+    }
 
     purgeShredditStyles();
     injectSubredditCSS(sidebarData);
     document.documentElement.id = "classic-reddit-ready";
 
-    if (Array.isArray(rawData)) {
-      currentModhash = rawData[0]?.data?.modhash || null;
-      renderCommentPage(rawData[0].data.children[0].data, rawData[1].data.children, sidebarData);
+    if (thread) {
+      currentModhash = (Array.isArray(rawData) ? rawData[0]?.data?.modhash : rawData?.data?.modhash) || null;
+      renderCommentPage(thread.post, thread.comments, sidebarData);
     } else if (rawData?.data?.children) {
       currentModhash = rawData.data.modhash || null;
       renderFeedPage(rawData.data, sidebarData);
+    } else {
+      document.documentElement.id = "classic-bypass";
     }
   } catch (err) {
     console.error("Classic Reddit Error:", err);
@@ -85,20 +92,44 @@ function waitForBody() {
   });
 }
 
+function readUserPayload(payload) {
+  if (!payload || typeof payload !== 'object') return null;
+  const data = payload.data && typeof payload.data === 'object' && payload.data.name
+    ? payload.data
+    : payload;
+  if (!data.name) return null;
+  return data;
+}
+
 async function fetchRedditUser() {
-  try {
-    const res = await fetch('https://www.reddit.com/api/v1/me.json', {
-      credentials: 'include',
-      headers: { 'Accept': 'application/json' }
-    });
-    if (res.ok) {
-      const data = await res.json();
-      if (data && data.name) {
-        localStorage.setItem('classic_reddit_username', data.name);
-        return data;
+  // /api/v1/me is OAuth-only and returns 401 for a normal browser session.
+  // /api/me.json is the cookie session. /user/me/about.json is the fallback
+  // that also carries karma when the legacy payload is empty.
+  const endpoints = ['/api/me.json', '/user/me/about.json'];
+  let confirmedLoggedOut = false;
+
+  for (const endpoint of endpoints) {
+    try {
+      const res = await fetch(endpoint, {
+        credentials: 'include',
+        headers: { 'Accept': 'application/json' }
+      });
+      if (!res.ok) continue;
+      const user = readUserPayload(await res.json());
+      if (!user) {
+        confirmedLoggedOut = true;
+        continue;
       }
-    }
-  } catch (e) { }
+      localStorage.setItem('classic_reddit_username', user.name);
+      if (user.modhash) currentModhash = user.modhash;
+      return user;
+    } catch (e) { }
+  }
+
+  if (confirmedLoggedOut) {
+    localStorage.removeItem('classic_reddit_username');
+    return null;
+  }
 
   const cachedName = localStorage.getItem('classic_reddit_username');
   if (cachedName) {
@@ -123,6 +154,132 @@ function injectSubredditCSS(sub) {
   }
 }
 
+function isSubmitRoute(pathname) {
+  return pathname === '/submit' || pathname === '/submit/' || /^\/r\/[^/]+\/submit\/?$/.test(pathname);
+}
+
+function commentIdFromPath(pathname) {
+  const path = (pathname || '').replace(/\/+$/, '');
+  const comment = path.match(/\/comments\/([a-z0-9]+)(?:\/|$)/i);
+  if (comment) return comment[1];
+  const gallery = path.match(/^\/gallery\/([a-z0-9]+)/i);
+  return gallery ? gallery[1] : null;
+}
+
+function buildListingUrl(pathname, search) {
+  const path = (pathname || '/').replace(/\/+$/, '') || '/';
+  const postId = commentIdFromPath(path);
+  if (postId && /\/comments\//i.test(path)) {
+    const subMatch = path.match(/^\/r\/([^/]+)\/comments\//i);
+    const base = subMatch ? `/r/${subMatch[1]}/comments/${postId}` : `/comments/${postId}`;
+    return `${location.origin}${base}.json${search || ''}`;
+  }
+  if (postId) return `${location.origin}/comments/${postId}.json${search || ''}`;
+  if (path === '/' || path === '/hot') return `${location.origin}/hot.json${search || ''}`;
+  return `${location.origin}${path}.json${search || ''}`;
+}
+
+function postFromPayload(rawData, postId) {
+  const pick = (children) => {
+    if (!Array.isArray(children)) return null;
+    const posts = children.filter(child => child?.kind === 't3' && child.data?.id);
+    if (!posts.length) return null;
+    const wanted = String(postId).toLowerCase();
+    return posts.find(child => String(child.data.id).toLowerCase() === wanted) || null;
+  };
+
+  if (Array.isArray(rawData)) {
+    const postChild = pick(rawData[0]?.data?.children);
+    if (!postChild) return null;
+    return { post: postChild.data, comments: rawData[1]?.data?.children || [] };
+  }
+
+  const postChild = pick(rawData?.data?.children);
+  if (!postChild) return null;
+  return { post: postChild.data, comments: [] };
+}
+
+function postPermalink(post) {
+  const raw = post?.permalink || '';
+  if (raw.startsWith('http')) {
+    try { return new URL(raw).pathname; } catch (e) { /* use the fallback below */ }
+  } else if (raw.startsWith('/')) {
+    return raw;
+  }
+  if (post?.subreddit && post?.id) return `/r/${post.subreddit}/comments/${post.id}/`;
+  return '/';
+}
+
+function cleanUrl(url) {
+  if (!url || typeof url !== 'string') return '';
+  const decoded = url.replace(/&amp;/g, '&');
+  try {
+    const parsed = new URL(decoded, location.origin);
+    const host = parsed.hostname.replace(/^www\./, '');
+    if ((host === 'reddit.com' || host.endsWith('.reddit.com')) && /^\/media\/?$/.test(parsed.pathname)) {
+      return parsed.searchParams.get('url') || '';
+    }
+    return decoded;
+  } catch (e) {
+    return decoded;
+  }
+}
+
+function isOffsiteLink(url) {
+  const file = cleanUrl(url);
+  if (!file) return false;
+  try {
+    const parsed = new URL(file, location.origin);
+    const host = parsed.hostname.replace(/^www\./, '');
+    if (host === 'reddit.com' || host.endsWith('.reddit.com')) return false;
+    if (host === 'redd.it' || host.endsWith('.redd.it')) return false;
+    return /^https?:\/\//i.test(file);
+  } catch (e) {
+    return false;
+  }
+}
+
+function postThumbnail(post) {
+  const placeholders = ['self', 'default', 'nsfw', 'spoiler', 'image'];
+  const candidates = [];
+  if (typeof post.thumbnail === 'string' && !placeholders.includes(post.thumbnail)) {
+    candidates.push(post.thumbnail);
+  }
+  const image = post.preview?.images?.[0];
+  if (image) {
+    const resolutions = image.resolutions || [];
+    const small = resolutions.find(item => item.width >= 64 && item.width <= 216) || resolutions[0];
+    if (small?.url) candidates.push(small.url);
+    if (image.source?.url) candidates.push(image.source.url);
+  }
+  for (const candidate of candidates) {
+    const url = cleanUrl(candidate);
+    if (/^https?:\/\//i.test(url)) return url;
+  }
+  return '';
+}
+
+function renderMediaPage(mediaUrl) {
+  const file = cleanUrl(mediaUrl || '');
+  const playable = /^https?:\/\//i.test(file) ? file : '';
+  const isVideo = /\.(mp4|webm)(?:$|\?)/i.test(playable);
+  const media = !playable
+    ? '<p class="tagline">This media link is empty.</p>'
+    : isVideo
+      ? '<video controls class="expando-video" src="' + escapeHTML(playable) + '"></video>'
+      : '<img class="expando-img" referrerpolicy="no-referrer" src="' + escapeHTML(playable) + '" alt="">';
+
+  document.body.innerHTML = '<div id="classic-app">' +
+    getHeaderHTML() +
+    '<div class="main-layout">' +
+    '<div class="content" style="padding: 15px;">' +
+    '<div class="panestack-title">image</div>' +
+    media +
+    '</div>' +
+    buildSidebarHTML(null) +
+    '</div></div>';
+}
+
 function getSubredditName() {
   const parts = window.location.pathname.split('/').filter(Boolean);
   if (parts[0] === 'r' && parts[1] && !['all', 'popular', 'friends'].includes(parts[1].toLowerCase())) {
@@ -131,7 +288,8 @@ function getSubredditName() {
   return null;
 }
 
-function getHeaderHTML() {
+function getHeaderHTML(options) {
+  const onSubmit = !!(options && options.submit);
   const parts = window.location.pathname.split('/').filter(Boolean);
   const subName = parts[0] === 'r' && parts[1] ? parts[1] : 'HOME';
   const subLink = subName === 'HOME' ? '/' : '/r/' + subName;
@@ -146,8 +304,12 @@ function getHeaderHTML() {
   const isWiki = currentSort === 'wiki' ? 'selected' : '';
 
   const username = currentUserData?.name || 'login';
-  const totalKarma = currentUserData ? ((currentUserData.total_karma || (currentUserData.link_karma + currentUserData.comment_karma)) || 0).toLocaleString() : '0';
+  const karmaTotal = currentUserData
+    ? (currentUserData.total_karma ?? ((currentUserData.link_karma || 0) + (currentUserData.comment_karma || 0)))
+    : 0;
+  const totalKarma = Number(karmaTotal || 0).toLocaleString();
   const userLink = currentUserData ? `/user/${username}` : '/login';
+  const submitBase = subName === 'HOME' ? '/submit' : `/r/${subName}/submit`;
 
   return `
     <div id="sr-header-area">
@@ -172,19 +334,21 @@ function getHeaderHTML() {
       <div id="header-bottom-left">
         <a id="header-img" href="/">reddit</a>
         <ul class="tabmenu">
-          <li class="${isBest}"><a href="${subLink === '/' ? '/best' : subLink + '/best'}">best</a></li>
+          ${onSubmit
+            ? `<li class="selected"><a href="${submitBase}">submit</a></li>`
+            : `<li class="${isBest}"><a href="${subLink === '/' ? '/best' : subLink + '/best'}">best</a></li>
           <li class="${isHot}"><a href="${subLink === '/' ? '/' : subLink + '/hot'}">hot</a></li>
           <li class="${isNew}"><a href="${subLink === '/' ? '/new' : subLink + '/new'}">new</a></li>
           <li class="${isRising}"><a href="${subLink === '/' ? '/rising' : subLink + '/rising'}">rising</a></li>
           <li class="${isControversial}"><a href="${subLink === '/' ? '/controversial' : subLink + '/controversial'}">controversial</a></li>
           <li class="${isTop}"><a href="${subLink === '/' ? '/top' : subLink + '/top'}">top</a></li>
-          <li class="${isWiki}"><a href="${subLink === '/' ? '/wiki' : subLink + '/wiki'}">wiki</a></li>
+          <li class="${isWiki}"><a href="${subLink === '/' ? '/wiki' : subLink + '/wiki'}">wiki</a></li>`}
         </ul>
       </div>
-      <div id="header-bottom-right">
-        <a href="/submit" class="pref-lang">Submit a new link</a>
-        <a href="/submit?selftext=true" class="pref-lang" style="margin-left: 5px;">Submit a new text post</a>
-      </div>
+      ${onSubmit ? '' : `<div id="header-bottom-right">
+        <a href="${submitBase}" class="pref-lang">Submit a new link</a>
+        <a href="${submitBase}?selftext=true" class="pref-lang">Submit a new text post</a>
+      </div>`}
     </div>
   `;
 }
@@ -197,7 +361,7 @@ function buildSidebarHTML(sub) {
       '</div>';
   }
 
-  const descHTML = sub.description_html ? decodeHTML(sub.description_html) : '';
+  const descHTML = sub.description_html ? safeHTML(sub.description_html) : '';
   const pubDesc = sub.public_description ? '<div class="pub-desc">' + sub.public_description + '</div>' : '';
   const subsCount = (sub.subscribers || 0).toLocaleString();
   const activeCount = (sub.accounts_active || 0).toLocaleString();
@@ -265,9 +429,9 @@ function renderProfilePage(pathname, children) {
 function buildProfileCommentItem(c) {
   return '<div class="thing profile-comment-box" id="comment_' + c.name + '">' +
     '<div class="entry" style="padding: 8px; border: 1px solid #e0e0e0; background: #fafafa; margin-bottom: 8px;">' +
-    '<p class="tagline"><a href="' + c.permalink + '" class="title-link" style="font-weight: bold; color: #336699;">in: ' + c.link_title + '</a> (r/' + c.subreddit + ')</p>' +
-    '<p class="tagline" style="margin-top: 4px;"><a href="/user/' + c.author + '" class="author">' + c.author + '</a> <span class="score">' + c.score + ' points</span> <span class="time">' + timeAgo(c.created_utc) + '</span></p>' +
-    '<div class="usertext-body" style="margin-top: 6px;">' + decodeHTML(c.body_html) + '</div>' +
+    '<p class="tagline"><a href="' + escapeHTML(c.permalink || '') + '" class="title-link" style="font-weight: bold; color: #336699;">in: ' + escapeHTML(c.link_title || '') + '</a> (r/' + escapeHTML(c.subreddit || '') + ')</p>' +
+    '<p class="tagline" style="margin-top: 4px;"><a href="/user/' + encodeURIComponent(c.author || '') + '" class="author">' + escapeHTML(c.author || '') + '</a> <span class="score">' + c.score + ' points</span> <span class="time">' + timeAgo(c.created_utc) + '</span></p>' +
+    '<div class="usertext-body" style="margin-top: 6px;">' + safeHTML(c.body_html) + '</div>' +
     '</div>' +
     '</div>';
 }
@@ -278,8 +442,15 @@ function renderFeedPage(listingData, sidebarData) {
   const currentCount = parseInt(urlParams.get('count') || '0', 10);
 
   let postsHTML = '';
-  posts.forEach((item, idx) => {
-    postsHTML += buildPostHTML(item.data, currentCount + idx + 1, false);
+  let shown = 0;
+  posts.forEach((item) => {
+    if (!item?.data || item.data.promoted) return;
+    if (item.kind === 't3' && item.data.id) {
+      shown += 1;
+      postsHTML += buildPostHTML(item.data, currentCount + shown, false);
+    } else if (item.kind === 't1') {
+      postsHTML += buildProfileCommentItem(item.data);
+    }
   });
 
   let prevLink = '';
@@ -317,7 +488,7 @@ function buildPostHTML(post, rank, isCommentPage) {
 
   if (post.selftext_html) {
     hasExpando = true;
-    expandoContent = '<div class="usertext-body md-box">' + decodeHTML(post.selftext_html) + '</div>';
+    expandoContent = '<div class="usertext-body md-box">' + safeHTML(post.selftext_html) + '</div>';
   } else if (post.is_gallery && post.media_metadata) {
     hasExpando = true;
     let galleryImages = '';
@@ -352,54 +523,59 @@ function buildPostHTML(post, rank, isCommentPage) {
       '<audio preload="metadata" id="audio-' + post.id + '" src="' + audioUrl + '"></audio>' +
       '</div>';
   } else {
-    const isDirectImage = post.post_hint === 'image' || /\.(jpg|jpeg|png|gif|webp)\$/i.test(post.url);
-    if (isDirectImage) {
+    const fileUrl = cleanUrl(post.url_overridden_by_dest || post.url || '');
+    const isDirectImage = post.post_hint === 'image' || /\.(jpe?g|png|gif|webp)(?:$|\?)/i.test(fileUrl);
+    if (isDirectImage && fileUrl) {
       hasExpando = true;
-      expandoContent = '<a href="' + post.url + '" target="_blank"><img class="expando-img" src="' + post.url + '" /></a>';
+      expandoContent = '<a href="' + escapeHTML(fileUrl) + '" target="_blank" rel="noreferrer"><img class="expando-img" referrerpolicy="no-referrer" src="' + escapeHTML(fileUrl) + '" /></a>';
     }
   }
 
-  const expandoBtn = hasExpando && !isCommentPage ? '<div class="expando-button" data-id="' + post.id + '" title="Toggle preview">[+]</div>' : '';
-  const thumbUrl = (post.thumbnail && post.thumbnail.startsWith('http')) ? post.thumbnail : null;
+  const expandoBtn = hasExpando && !isCommentPage ? '<div class="expando-button" data-id="' + escapeHTML(post.name) + '" title="Toggle preview">[+]</div>' : '';
+  const thumbUrl = postThumbnail(post);
+  const permalink = postPermalink(post);
+  const outbound = cleanUrl(post.url_overridden_by_dest || post.url || '');
+  const externalUrl = !post.is_self && isOffsiteLink(outbound) ? outbound : '';
+  const titleHref = externalUrl || permalink;
+  const thumbHref = externalUrl || permalink;
 
   let thumbHTML = '';
   if (post.over_18 && !thumbUrl) {
-    thumbHTML = '<a class="thumbnail nsfw-thumb" href="' + post.permalink + '">18+</a>';
+    thumbHTML = '<a class="thumbnail nsfw-thumb" href="' + escapeHTML(permalink) + '">18+</a>';
   } else if (thumbUrl) {
-    thumbHTML = '<a class="thumbnail" href="' + (post.is_self ? post.permalink : post.url) + '"><img src="' + thumbUrl + '" width="70" height="50" alt=""></a>';
+    thumbHTML = '<a class="thumbnail" href="' + escapeHTML(thumbHref) + '"><img src="' + escapeHTML(thumbUrl) + '" width="70" height="50" alt="" referrerpolicy="no-referrer"></a>';
   } else {
-    thumbHTML = '<a class="thumbnail default-thumb" href="' + post.permalink + '">' + (post.is_self ? 'self' : 'link') + '</a>';
+    thumbHTML = '<a class="thumbnail default-thumb" href="' + escapeHTML(permalink) + '">' + (post.is_self ? 'self' : 'link') + '</a>';
   }
 
   const nsfwBadge = post.over_18 ? '<span class="nsfw-stamp">18+</span>' : '';
   const nsfwClass = post.over_18 ? 'over-18' : '';
 
-  const flairHTML = post.link_flair_text ? '<span class="linkflairlabel">' + post.link_flair_text + '</span>' : '';
+  const flairHTML = post.link_flair_text ? '<span class="linkflairlabel">' + escapeHTML(post.link_flair_text) + '</span>' : '';
   const rankHTML = rank ? '<span class="rank">' + rank + '</span>' : '';
   const stickiedClass = post.stickied ? 'stickied' : '';
-  const targetUrl = post.is_self ? post.permalink : post.url;
 
-  return '<div class="thing ' + stickiedClass + ' ' + nsfwClass + '" id="thing_' + post.name + '">' +
+  return '<div class="thing ' + stickiedClass + ' ' + nsfwClass + '" id="thing_' + escapeHTML(post.name) + '">' +
     rankHTML +
     '<div class="midcol ' + voteClass + '" data-score="' + post.score + '">' +
-    '<div class="arrow up" data-fullname="' + post.name + '" data-dir="1">▲</div>' +
+    '<div class="arrow up" data-fullname="' + escapeHTML(post.name) + '" data-dir="1">▲</div>' +
     '<div class="score">' + formatScore(post.score) + '</div>' +
-    '<div class="arrow down" data-fullname="' + post.name + '" data-dir="-1">▼</div>' +
+    '<div class="arrow down" data-fullname="' + escapeHTML(post.name) + '" data-dir="-1">▼</div>' +
     '</div>' +
     thumbHTML +
     '<div class="entry">' +
     '<p class="title">' +
     nsfwBadge +
     flairHTML +
-    '<a class="title-link" href="' + targetUrl + '">' + post.title + '</a>' +
-    '<span class="domain">(<a href="/domain/' + post.domain + '">' + post.domain + '</a>)</span>' +
+    '<a class="title-link" href="' + escapeHTML(titleHref) + '">' + escapeHTML(post.title) + '</a>' +
+    '<span class="domain">(<a href="/domain/' + encodeURIComponent(post.domain || '') + '">' + escapeHTML(post.domain || '') + '</a>)</span>' +
     '</p>' +
     '<div class="sub-row">' +
     expandoBtn +
     '<div class="meta">' +
-    '<p class="tagline">submitted ' + timeAgo(post.created_utc) + ' by <a href="/user/' + post.author + '" class="author">' + post.author + '</a> to <a href="/r/' + post.subreddit + '" class="subreddit">r/' + post.subreddit + '</a></p>' +
+    '<p class="tagline">submitted ' + timeAgo(post.created_utc) + ' by <a href="/user/' + encodeURIComponent(post.author || '') + '" class="author">' + escapeHTML(post.author || '') + '</a> to <a href="/r/' + encodeURIComponent(post.subreddit || '') + '" class="subreddit">r/' + escapeHTML(post.subreddit || '') + '</a></p>' +
     '<ul class="flat-list buttons">' +
-    '<li class="first"><a href="' + post.permalink + '" class="comments">' + post.num_comments + ' comments</a></li>' +
+    '<li class="first"><a href="' + escapeHTML(permalink) + '" class="comments">' + post.num_comments + ' comments</a></li>' +
     '<li><a href="javascript:void(0)" class="share-button">share</a></li>' +
     '<li><a href="javascript:void(0)" class="save-button" data-fullname="' + post.name + '">save</a></li>' +
     '<li><a href="javascript:void(0)" class="hide-button" data-fullname="' + post.name + '">hide</a></li>' +
@@ -408,7 +584,7 @@ function buildPostHTML(post, rank, isCommentPage) {
     '</ul>' +
     '</div>' +
     '</div>' +
-    '<div class="expando ' + (isCommentPage && expandoContent ? 'open' : '') + '" id="expando-' + post.id + '">' + expandoContent + '</div>' +
+    '<div class="expando ' + (isCommentPage && expandoContent ? 'open' : '') + '" id="expando-' + escapeHTML(post.name) + '">' + expandoContent + '</div>' +
     '</div>' +
     '</div>';
 }
@@ -470,7 +646,7 @@ function buildCommentTree(commentNode, postAuthor) {
     '<span class="time">' + timeAgo(c.created_utc) + '</span>' +
     '</p>' +
     '<div class="comment-body">' +
-    '<div class="usertext-body">' + decodeHTML(c.body_html) + '</div>' +
+    '<div class="usertext-body">' + safeHTML(c.body_html) + '</div>' +
     '<ul class="flat-list buttons">' +
     '<li><a href="#comment_' + c.name + '">permalink</a></li>' +
     '<li><a href="javascript:void(0)" class="reply-button" data-fullname="' + c.name + '">reply</a></li>' +
@@ -482,62 +658,361 @@ function buildCommentTree(commentNode, postAuthor) {
 }
 
 function renderSubmitPage() {
+  const isSelf = new URLSearchParams(window.location.search).get('selftext') === 'true';
   const subName = getSubredditName() || '';
+  const submitBase = subName ? `/r/${subName}/submit` : '/submit';
+  const info = isSelf
+    ? 'You are submitting a text-based post. Speak your mind. A title is required, but expanding further in the text field is not. Beginning your title with "vote up if" is a violation of intergalactic law.'
+    : 'You are submitting a link. The key to a successful submission is interesting content and a descriptive title.';
+
+  const typeFields = isSelf
+    ? '<div class="roundfield">' +
+      '<label for="submit-title"><span class="submit-required">*</span>title</label>' +
+      '<textarea id="submit-title" rows="3"></textarea>' +
+      '</div>' +
+      '<div class="roundfield">' +
+      '<label for="submit-text">text <span class="submit-optional">(optional)</span></label>' +
+      '<textarea id="submit-text" rows="8"></textarea>' +
+      '<div class="submit-help-links">' +
+      '<a href="https://www.redditinc.com/policies/content-policy" target="_blank" rel="noreferrer">content policy</a>' +
+      '<a href="https://www.reddit.com/wiki/commenting" target="_blank" rel="noreferrer">formatting help</a>' +
+      '</div>' +
+      '</div>'
+    : '<div class="roundfield">' +
+      '<label for="submit-url">url</label>' +
+      '<input type="url" id="submit-url">' +
+      '</div>' +
+      '<div class="roundfield">' +
+      '<div class="roundfield-title">image/video</div>' +
+      '<div class="submit-drop" id="submit-drop">' +
+      '<span class="submit-drop-icon" aria-hidden="true"></span>' +
+      '<span id="submit-drop-label">Drop here or</span>' +
+      '<button type="button" id="submit-file-btn" class="submit-file-btn">CHOOSE FILE</button>' +
+      '<input type="file" id="submit-file" class="submit-file-input" accept="image/*,video/*">' +
+      '</div>' +
+      '</div>' +
+      '<div class="roundfield">' +
+      '<label for="submit-title"><span class="submit-required">*</span>title</label>' +
+      '<textarea id="submit-title" rows="3"></textarea>' +
+      '</div>';
+
   const html = '<div id="classic-app">' +
-    getHeaderHTML() +
+    getHeaderHTML({ submit: true }) +
     '<div class="main-layout">' +
-    '<div class="content" style="padding: 15px;">' +
-    '<div class="panestack-title">submit to reddit</div>' +
-    '<div class="submit-form-container">' +
-    '<div class="field-row"><label>Choose a subreddit:</label><input type="text" id="submit-sr" value="' + subName + '" placeholder="e.g. programming"></div>' +
-    '<div class="field-row"><label>Title:</label><textarea id="submit-title" rows="2" placeholder="Post title"></textarea></div>' +
-    '<div class="field-row"><label>Text (optional):</label><textarea id="submit-text" rows="10" placeholder="Markdown text body"></textarea></div>' +
-    '<button type="button" id="submit-post-btn" class="btn-classic">Submit Post</button>' +
+    '<div class="content submit-page">' +
+    '<h1>submit to reddit</h1>' +
+    '<ul class="submit-tabs">' +
+    '<li class="' + (isSelf ? '' : 'selected') + '"><a href="' + submitBase + '">link</a></li>' +
+    '<li class="' + (isSelf ? 'selected' : '') + '"><a href="' + submitBase + '?selftext=true">text</a></li>' +
+    '</ul>' +
+    '<div class="submit-panel">' +
+    '<div id="submit-status" class="submit-error" hidden></div>' +
+    '<div class="infobar">' + info + '</div>' +
+    typeFields +
+    '<div class="roundfield">' +
+    '<div class="roundfield-title"><span class="submit-required">*</span>choose where to post</div>' +
+    '<label class="submit-radio"><input type="radio" name="submit-dest" id="submit-dest-profile" value="profile"> Your profile</label>' +
+    '<label class="submit-radio"><input type="radio" name="submit-dest" id="submit-dest-sub" value="subreddit" checked> A subreddit:</label>' +
+    '<input type="text" id="submit-sr" value="' + escapeHTML(subName) + '">' +
+    '<div class="submit-subs-title">your subscribed subreddits</div>' +
+    '<div class="submit-sub-list" id="submit-subs">loading…</div>' +
+    '</div>' +
+    '<div class="roundfield">' +
+    '<div class="roundfield-title">options</div>' +
+    '<label class="submit-check"><input type="checkbox" id="submit-sendreplies" checked> send replies to my inbox</label>' +
+    '</div>' +
+    '<div class="submit-notice">please be mindful of reddit\'s <a href="https://www.redditinc.com/policies/content-policy" target="_blank" rel="noreferrer">content policy</a> and practice good <a href="https://www.reddit.com/wiki/reddiquette" target="_blank" rel="noreferrer">reddiquette</a>.</div>' +
+    '<p class="submit-required-note"><span class="submit-required">*</span>required</p>' +
+    '<button type="button" id="submit-post-btn" class="submit-native">submit</button>' +
     '</div>' +
     '</div>' +
+    buildSubmitSidebarHTML() +
     '</div>' +
+    buildSubmitFooterHTML() +
     '</div>';
 
   document.body.innerHTML = html;
   document.documentElement.id = "classic-reddit-ready";
+  attachSubmitListeners(isSelf);
+  loadSubscribedSubreddits();
+}
 
-  document.getElementById('submit-post-btn').addEventListener('click', async () => {
-    const sr = document.getElementById('submit-sr').value.trim();
-    const title = document.getElementById('submit-title').value.trim();
-    const text = document.getElementById('submit-text').value.trim();
+function buildSubmitSidebarHTML() {
+  return '<div class="side">' +
+    '<div class="spacer"><form action="/search" id="search"><input type="text" name="q" placeholder="search reddit"></form></div>' +
+    '<div class="account-activity"><a href="https://www.reddit.com/account-activity">account activity</a></div>' +
+    '</div>';
+}
 
-    if (!sr || !title) {
-      alert('Please fill out the subreddit and title fields.');
+function buildSubmitFooterHTML() {
+  return '<div class="footer-parent">' +
+    '<div class="footer-columns">' +
+    '<div class="footer-col"><div class="footer-col-title">about</div>' +
+    '<a href="https://www.redditinc.com/blog">blog</a>' +
+    '<a href="https://www.redditinc.com">about</a>' +
+    '<a href="https://www.redditinc.com/advertising">advertising</a>' +
+    '<a href="https://www.redditinc.com/careers">careers</a></div>' +
+    '<div class="footer-col"><div class="footer-col-title">help</div>' +
+    '<a href="https://www.redditinc.com/policies/content-policy">site rules</a>' +
+    '<a href="https://www.reddithelp.com">reddit help center</a>' +
+    '<a href="https://www.reddit.com/wiki/reddiquette">reddiquette</a>' +
+    '<a href="https://www.reddit.com/wiki/moderation">mod guidelines</a>' +
+    '<a href="https://www.reddithelp.com/en/submit-request">contact us</a></div>' +
+    '<div class="footer-col"><div class="footer-col-title">apps &amp; tools</div>' +
+    '<a href="https://apps.apple.com/app/reddit/id1064216828">Reddit for iPhone</a>' +
+    '<a href="https://play.google.com/store/apps/details?id=com.reddit.frontpage">Reddit for Android</a>' +
+    '<a href="https://www.reddit.com">mobile website</a></div>' +
+    '<div class="footer-col"><div class="footer-col-title footer-heart">&lt;3</div>' +
+    '<a class="footer-premium" href="https://www.reddit.com/premium">reddit premium</a></div>' +
+    '</div>' +
+    '<p class="footer-legal">Use of this site constitutes acceptance of our <a href="https://www.redditinc.com/policies/user-agreement">User Agreement</a> and <a href="https://www.redditinc.com/policies/privacy-policy">Privacy Policy</a>. © 2026 reddit inc. All rights reserved.<br>REDDIT and the ALIEN Logo are registered trademarks of reddit inc.</p>' +
+    '</div>';
+}
+
+function showSubmitError(message) {
+  const el = document.getElementById('submit-status');
+  if (!el) return;
+  el.hidden = !message;
+  el.textContent = message || '';
+}
+
+function attachSubmitListeners(isSelf) {
+  const profileRadio = document.getElementById('submit-dest-profile');
+  const subRadio = document.getElementById('submit-dest-sub');
+  const srInput = document.getElementById('submit-sr');
+  const subs = document.getElementById('submit-subs');
+
+  function syncDest() {
+    const profile = profileRadio.checked;
+    srInput.disabled = profile;
+    subs.classList.toggle('disabled', profile);
+  }
+
+  profileRadio.addEventListener('change', syncDest);
+  subRadio.addEventListener('change', syncDest);
+  srInput.addEventListener('focus', () => {
+    subRadio.checked = true;
+    syncDest();
+  });
+
+  if (!isSelf) attachSubmitUpload();
+
+  document.getElementById('submit-post-btn').addEventListener('click', () => submitClassicPost(isSelf));
+}
+
+function attachSubmitUpload() {
+  const drop = document.getElementById('submit-drop');
+  const fileInput = document.getElementById('submit-file');
+  const fileBtn = document.getElementById('submit-file-btn');
+  if (!drop || !fileInput) return;
+
+  fileBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    fileInput.click();
+  });
+  drop.addEventListener('click', (e) => {
+    if (e.target.closest('#submit-file-btn')) return;
+    fileInput.click();
+  });
+  drop.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    drop.classList.add('dragover');
+  });
+  drop.addEventListener('dragleave', () => drop.classList.remove('dragover'));
+  drop.addEventListener('drop', (e) => {
+    e.preventDefault();
+    drop.classList.remove('dragover');
+    const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (file) uploadSubmitMedia(file);
+  });
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files && fileInput.files[0];
+    if (file) uploadSubmitMedia(file);
+  });
+
+  document.getElementById('submit-url').addEventListener('input', () => {
+    if (drop.dataset.mediaUrl && document.getElementById('submit-url').value.trim() !== drop.dataset.mediaUrl) {
+      delete drop.dataset.mediaKind;
+      delete drop.dataset.mediaUrl;
+    }
+  });
+}
+
+async function uploadSubmitMedia(file) {
+  const drop = document.getElementById('submit-drop');
+  const label = document.getElementById('submit-drop-label');
+  const urlInput = document.getElementById('submit-url');
+  const isVideo = (file.type || '').startsWith('video/');
+  const isImage = (file.type || '').startsWith('image/');
+  delete drop.dataset.mediaKind;
+  delete drop.dataset.mediaUrl;
+
+  if (!isVideo && !isImage) {
+    label.textContent = 'Drop here or';
+    showSubmitError('Choose an image or video file.');
+    return;
+  }
+
+  label.textContent = 'uploading ' + file.name + '…';
+  showSubmitError('');
+
+  try {
+    const uh = currentModhash || getCookie('csrf_token');
+    const leaseParams = new URLSearchParams({
+      filepath: file.name,
+      mimetype: file.type || 'application/octet-stream',
+      api_type: 'json'
+    });
+    if (uh) leaseParams.set('uh', uh);
+
+    const leaseRes = await fetch('/api/media/asset.json', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: leaseParams.toString()
+    });
+    const leaseJson = await leaseRes.json();
+    const payload = leaseJson.args ? leaseJson : (leaseJson.json && leaseJson.json.data);
+    if (!payload || !payload.args || !payload.asset) {
+      throw new Error('could not start the upload');
+    }
+
+    const form = new FormData();
+    payload.args.fields.forEach((field) => form.append(field.name, field.value));
+    form.append('file', file);
+
+    let action = payload.args.action || '';
+    if (action.startsWith('//')) action = 'https:' + action;
+    const uploadRes = await fetch(action, { method: 'POST', body: form });
+    if (!uploadRes.ok && uploadRes.status !== 201) throw new Error('upload failed');
+
+    const keyField = payload.args.fields.find((field) => field.name === 'key');
+    const key = keyField ? keyField.value.replace(/^\//, '') : '';
+    const mediaUrl = 'https://reddit-uploaded-media.s3-accelerate.amazonaws.com/' + key;
+    drop.dataset.mediaKind = isVideo ? 'video' : 'image';
+    drop.dataset.mediaUrl = mediaUrl;
+    urlInput.value = mediaUrl;
+    label.textContent = file.name;
+  } catch (err) {
+    label.textContent = 'Drop here or';
+    showSubmitError('Could not upload that file. Paste a url instead.');
+    console.error('Media upload failed:', err);
+  }
+}
+
+async function loadSubscribedSubreddits() {
+  const box = document.getElementById('submit-subs');
+  if (!box) return;
+
+  try {
+    const names = [];
+    let after = '';
+    for (let page = 0; page < 4; page++) {
+      const url = '/subreddits/mine/subscriber.json?limit=100&raw_json=1' + (after ? '&after=' + encodeURIComponent(after) : '');
+      const res = await fetch(url, { credentials: 'include' });
+      if (!res.ok) break;
+      const data = await res.json();
+      (data?.data?.children || []).forEach((item) => {
+        if (item?.data?.display_name) names.push(item.data.display_name);
+      });
+      after = data?.data?.after || '';
+      if (!after) break;
+    }
+
+    if (!names.length) {
+      box.textContent = 'log in to see your subscriptions';
       return;
     }
 
-    const uh = currentModhash || getCookie('csrf_token');
-    const bodyParams = new URLSearchParams({
-      api_type: 'json',
-      kind: text ? 'self' : 'link',
-      sr: sr,
-      title: title,
-      text: text || '',
-      uh: uh
-    });
-
-    try {
-      const res = await fetch('/api/submit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        credentials: 'include',
-        body: bodyParams.toString()
+    box.innerHTML = names.map((name) => '<a href="#" data-sub="' + escapeHTML(name) + '">' + escapeHTML(name) + '</a>').join(' ');
+    box.querySelectorAll('a').forEach((link) => {
+      link.addEventListener('click', (e) => {
+        e.preventDefault();
+        document.getElementById('submit-sr').value = link.dataset.sub;
+        document.getElementById('submit-dest-sub').checked = true;
+        document.getElementById('submit-sr').disabled = false;
+        box.classList.remove('disabled');
       });
-      const data = await res.json();
-      if (data.json && data.json.errors.length === 0) {
-        window.location.href = data.json.data.url;
-      } else {
-        alert('Submission error: ' + JSON.stringify(data.json.errors));
-      }
-    } catch (err) {
-      console.error('Post submission failed:', err);
+    });
+  } catch (err) {
+    box.textContent = '';
+  }
+}
+
+async function submitClassicPost(isSelf) {
+  const title = document.getElementById('submit-title').value.trim();
+  const profile = document.getElementById('submit-dest-profile').checked;
+  const srInput = document.getElementById('submit-sr').value.trim();
+  const text = isSelf ? document.getElementById('submit-text').value.trim() : '';
+  const urlInput = isSelf ? null : document.getElementById('submit-url');
+  const url = urlInput ? urlInput.value.trim() : '';
+  const drop = document.getElementById('submit-drop');
+  const button = document.getElementById('submit-post-btn');
+
+  if (!title) {
+    showSubmitError('a title is required');
+    return;
+  }
+
+  let sr = srInput;
+  if (profile) {
+    if (!currentUserData?.name) {
+      showSubmitError('log in to post to your profile');
+      return;
     }
+    sr = 'u_' + currentUserData.name;
+  } else if (!sr) {
+    showSubmitError('choose a subreddit');
+    return;
+  }
+
+  let kind = isSelf ? 'self' : 'link';
+  if (!isSelf && drop && drop.dataset.mediaKind && drop.dataset.mediaUrl === url) {
+    kind = drop.dataset.mediaKind;
+  }
+  if (!isSelf && !url) {
+    showSubmitError('a url or an image/video is required');
+    return;
+  }
+
+  const uh = currentModhash || getCookie('csrf_token');
+  const bodyParams = new URLSearchParams({
+    api_type: 'json',
+    kind: kind,
+    sr: sr,
+    title: title,
+    uh: uh || '',
+    sendreplies: document.getElementById('submit-sendreplies').checked ? 'true' : 'false'
   });
+  if (isSelf) bodyParams.set('text', text);
+  else bodyParams.set('url', url);
+
+  showSubmitError('');
+  button.disabled = true;
+
+  try {
+    const res = await fetch('/api/submit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      credentials: 'include',
+      body: bodyParams.toString()
+    });
+    const data = await res.json();
+    if (data.json && data.json.errors && data.json.errors.length === 0) {
+      window.location.href = data.json.data.url;
+      return;
+    }
+    const errors = data.json && data.json.errors;
+    const message = Array.isArray(errors) && errors.length
+      ? errors.map((item) => item[1] || item[0]).join('\n')
+      : 'Submission failed.';
+    showSubmitError(message);
+    button.disabled = false;
+  } catch (err) {
+    console.error('Post submission failed:', err);
+    showSubmitError('Submission failed.');
+    button.disabled = false;
+  }
 }
 
 function attachInteractiveListeners() {
@@ -818,6 +1293,21 @@ function attachVideoSyncListeners() {
 function getCookie(name) {
   const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
   return match ? match[2] : null;
+}
+
+function escapeHTML(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function safeHTML(html) {
+  if (!html) return '';
+  const decoded = decodeHTML(html);
+  const doc = new DOMParser().parseFromString(decoded, 'text/html');
+  return doc.body.innerHTML;
 }
 
 function decodeHTML(html) {

@@ -23,10 +23,11 @@ The script replaces `document.body` with classic HTML built from Reddit JSON. Re
 `initClassicReddit` branches on `location.pathname`:
 
 1. **Bypass.** Paths matching `/chat`, `/settings`, `/poll`, `/mod`, or `/message` set `classic-bypass` and return. Do not render classic HTML on these routes.
-2. **Submit.** `/submit` renders `renderSubmitPage`.
+2. **Submit.** `/submit` and `/r/{name}/submit` render `renderSubmitPage`. `selftext=true` is the text-post form. A bare submit URL is the link form.
 3. **Profile and saved.** `/user/...` and `/saved` fetch `{pathname}.json` and render `renderProfilePage`. Listings can mix link posts (`t3`) and comments (`t1`).
-4. **Listings and threads.** Everything else fetches `{pathname}.json` (the bare frontpage and `/hot` both request `/hot.json`).
-   - An array response is a comment page: post at `[0].data.children[0]`, comments at `[1].data.children`.
+4. **Media.** `/media?url=` shows that image or video. It is not fetched as a listing.
+5. **Listings and threads.** Everything else fetches `{pathname}.json` (the bare frontpage and `/hot` both request `/hot.json`).
+   - A comments or gallery URL is loaded from `/comments/{id}.json`. The post whose id matches the URL is rendered. The first child is not assumed to be that post.
    - An object with `data.children` is a feed.
 
 A subreddit path (`/r/{name}`, excluding `all`, `popular`, and `friends`) also fetches `/r/{name}/about.json` for the sidebar. That payload's `stylesheet` is injected as `#subreddit-custom-css`. `purgeShredditStyles` removes every other `link[rel=stylesheet]` and `style` element, and must keep that id.
@@ -57,7 +58,7 @@ HTML is concatenated strings, then assigned to `document.body.innerHTML`. After 
 | `renderFeedPage` | Listing plus prev/next using `before` / `after` |
 | `renderCommentPage` | Post with the expando open, then the comment tree |
 | `renderProfilePage` | Overview or saved items |
-| `renderSubmitPage` | Subreddit, title, and optional text form |
+| `renderSubmitPage` | Old-reddit submit form. `selftext=true` is the text tab. Otherwise the link tab, with url and image/video upload. |
 
 Feed pagination assumes 25 items. The next link uses `count + 25` and `after`. The previous link uses `count - 25` and `before`.
 
@@ -67,7 +68,7 @@ Comment trees recurse through `replies.data.children`. A `more` kind renders a c
 
 ## Session and writes
 
-`fetchRedditUser` calls `/api/v1/me.json` with `credentials: 'include'`. A successful `name` is stored in `localStorage` as `classic_reddit_username`. If the request fails, the header falls back to that cached name with zero karma. Logged-out users see a login link.
+`fetchRedditUser` calls `/api/me.json` with `credentials: 'include'`, then `/user/me/about.json` if that payload has no username. `/api/v1/me` is OAuth-only and does not see a normal browser session. A successful `name` is stored in `localStorage` as `classic_reddit_username`, and `modhash` is kept for later writes. If the account endpoints say nobody is logged in, the cache is cleared and the header shows a login link. If they fail outright, the header falls back to the cached name with zero karma.
 
 Write calls need a modhash. Listings set `currentModhash` from `data.modhash`. If that is missing, `getCookie('csrf_token')` is the fallback. Requests are `application/x-www-form-urlencoded` and include credentials.
 
@@ -77,7 +78,7 @@ Write calls need a modhash. Listings set `currentModhash` from `data.modhash`. I
 | Save | `POST /api/save` | Button label flips between save and unsave. The request is always save. |
 | Hide | `POST /api/hide` | The `.thing` is hidden after the request is sent. |
 | Reply | `POST /api/comment` | Reloads the page on success. |
-| Submit | `POST /api/submit` | `kind` is `self` when the text field is non-empty, otherwise `link`. Redirects to `json.data.url` when `errors` is empty. |
+| Submit | `POST /api/submit` | Text tab sends `kind=self` and `text`. Link tab sends `kind=link` and `url`, or `image`/`video` after an upload to `/api/media/asset.json`. Profile posts use `sr=u_{name}`. `sendreplies` follows the inbox checkbox. Subscriptions come from `/subreddits/mine/subscriber.json`. |
 
 Thing ids are Reddit fullnames (`t3_` posts, `t1_` comments) from `data-fullname`.
 
