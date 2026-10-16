@@ -205,3 +205,11 @@ html#classic-reddit-ready body {
   font-weight: bold;
   font-size: 11px;
 }
+
+/* --- RES KEYBOARD NAVIGATION HIGHLIGHT --- */
+.thing.selected,
+.comment.selected {
+  background-color: #f8f9fa !important;
+  outline: 2px solid #5f99cf !important;
+  outline-offset: -2px;
+}

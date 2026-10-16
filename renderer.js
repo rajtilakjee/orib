@@ -352,7 +352,7 @@ function buildPostHTML(post, rank, isCommentPage) {
                        '<audio preload="metadata" id="audio-' + post.id + '" src="' + audioUrl + '"></audio>' +
                      '</div>';
   } else {
-    const isDirectImage = post.post_hint === 'image' || /\.(jpg|jpeg|png|gif|webp)$/i.test(post.url);
+    const isDirectImage = post.post_hint === 'image' || /\.(jpg|jpeg|png|gif|webp)\$/i.test(post.url);
     if (isDirectImage) {
       hasExpando = true;
       expandoContent = '<a href="' + post.url + '" target="_blank"><img class="expando-img" src="' + post.url + '" /></a>';
@@ -362,7 +362,6 @@ function buildPostHTML(post, rank, isCommentPage) {
   const expandoBtn = hasExpando && !isCommentPage ? '<div class="expando-button" data-id="' + post.id + '" title="Toggle preview">[+]</div>' : '';
   const thumbUrl = (post.thumbnail && post.thumbnail.startsWith('http')) ? post.thumbnail : null;
   
-  // If post is NSFW and thumbnail is blurred/hidden by default, show classic thumbnail override
   let thumbHTML = '';
   if (post.over_18 && !thumbUrl) {
     thumbHTML = '<a class="thumbnail nsfw-thumb" href="' + post.permalink + '">18+</a>';
@@ -372,7 +371,6 @@ function buildPostHTML(post, rank, isCommentPage) {
     thumbHTML = '<a class="thumbnail default-thumb" href="' + post.permalink + '">' + (post.is_self ? 'self' : 'link') + '</a>';
   }
 
-  // --- NSFW 18+ BADGE & BLUR LOGIC ---
   const nsfwBadge = post.over_18 ? '<span class="nsfw-stamp">18+</span>' : '';
   const nsfwClass = post.over_18 ? 'over-18' : '';
 
@@ -631,6 +629,93 @@ function attachInteractiveListeners() {
   });
 
   attachVideoSyncListeners();
+  attachKeyboardShortcuts();
+}
+
+// --- RES KEYBOARD SHORTCUT ENGINE ---
+function attachKeyboardShortcuts() {
+  document.addEventListener('keydown', (e) => {
+    if (['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName) || document.activeElement.isContentEditable) {
+      return;
+    }
+
+    const isShift = e.shiftKey;
+    const key = e.key;
+
+    if (isShift && key === '?') {
+      e.preventDefault();
+      alert("Classic Reddit Keyboard Shortcuts:\n\n" +
+            "j / k: Next / Previous post or comment\n" +
+            "Enter: Open link or expand comment\n" +
+            "x: Toggle post expando\n" +
+            "Shift + x: Toggle all expandos\n" +
+            "c: Open comments\n" +
+            "a / z: Upvote / Downvote\n" +
+            "s: Save\n" +
+            "h: Hide post\n" +
+            "r: Reply to comment");
+      return;
+    }
+
+    const items = Array.from(document.querySelectorAll('.thing, .comment'));
+    if (items.length === 0) return;
+
+    let currentIndex = items.findIndex(item => item.classList.contains('selected'));
+    if (currentIndex === -1 && (key === 'j' || key === 'k')) {
+      currentIndex = 0;
+      items[0].classList.add('selected');
+      items[0].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      return;
+    }
+
+    const currentItem = items[currentIndex];
+
+    if (key === 'j' || key === 'k') {
+      e.preventDefault();
+      if (currentIndex !== -1) currentItem.classList.remove('selected');
+      
+      if (key === 'j') {
+        currentIndex = Math.min(items.length - 1, currentIndex + 1);
+      } else {
+        currentIndex = Math.max(0, currentIndex - 1);
+      }
+
+      const nextItem = items[currentIndex];
+      nextItem.classList.add('selected');
+      nextItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    } else if (key === 'x' && !isShift) {
+      const expBtn = currentItem?.querySelector('.expando-button');
+      if (expBtn) { e.preventDefault(); expBtn.click(); }
+    } else if (isShift && key === 'X') {
+      e.preventDefault();
+      const allBtns = document.querySelectorAll('.expando-button');
+      const anyClosed = Array.from(allBtns).some(b => b.textContent.includes('[+]'));
+      allBtns.forEach(btn => {
+        const isOpen = btn.textContent.includes('[-]');
+        if (anyClosed && isOpen) return;
+        if (!anyClosed && !isOpen) return;
+        btn.click();
+      });
+    } else if (key === 'c' && !isShift) {
+      const commentsLink = currentItem?.querySelector('.comments');
+      if (commentsLink) { e.preventDefault(); window.location.href = commentsLink.href; }
+    } else if (key === 'a') {
+      const upArrow = currentItem?.querySelector('.arrow.up');
+      if (upArrow) { e.preventDefault(); upArrow.click(); }
+    } else if (key === 'z') {
+      const downArrow = currentItem?.querySelector('.arrow.down');
+      if (downArrow) { e.preventDefault(); downArrow.click(); }
+    } else if (key === 's' && !isShift) {
+      const saveBtn = currentItem?.querySelector('.save-button');
+      if (saveBtn) { e.preventDefault(); saveBtn.click(); }
+    } else if (key === 'h' && !isShift) {
+      const hideBtn = currentItem?.querySelector('.hide-button');
+      if (hideBtn) { e.preventDefault(); hideBtn.click(); }
+    } else if (key === 'Enter') {
+      const titleLink = currentItem?.querySelector('.title-link');
+      if (titleLink) { e.preventDefault(); window.open(titleLink.href, '_blank'); }
+    }
+  });
 }
 
 async function hidePostAPI(fullname) {
