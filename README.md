@@ -1,2 +1,2 @@
-# Redditux
-_Reddit + Redux - Bring back old Reddit._
+# Old Reddit Is Back (ORIB)
+_Bringing back old Reddit with new enhancements._

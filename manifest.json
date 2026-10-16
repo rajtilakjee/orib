@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Redditux",
+  "name": "Old Reddit Is Back (ORIB)",
   "version": "1.0.0",
-  "description": "Reddit + Redux - Bring back old Reddit.",
+  "description": "Bringing back old Reddit with new enhancements.",
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
