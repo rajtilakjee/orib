@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Old Reddit Is Back (ORIB)",
+  "name": "ORIB",
   "version": "1.0.0",
-  "description": "Bringing back old Reddit with new enhancements.",
+  "description": "Bringing back old Reddit interface with new enhancements.",
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
