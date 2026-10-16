@@ -67,9 +67,11 @@ The Chrome Web Store and Firefox Add-ons copy, plus the privacy policy, are in [
 | `store/` | Listing text and privacy policy |
 | `ARCHITECTURE.md` | Runtime flow and API usage |
 | `DESIGN.md` | Visual rules for the classic UI |
+| `CONTRIBUTING.md` | Contribution workflow and Conventional Commits guide |
 | `AGENTS.md` | Notes for coding agents working in this repo |
 
 ## Docs
 
 - [Architecture](ARCHITECTURE.md) — how a page is replaced and which endpoints are called
 - [Design](DESIGN.md) — colors, type, and layout that keep the UI looking like old Reddit
+- [Contributing](CONTRIBUTING.md) — development setup, coding guidelines, and commit standards
