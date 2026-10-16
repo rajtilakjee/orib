@@ -1,0 +1,34 @@
+---
+description: How renderer.js fetches Reddit and writes classic HTML
+globs: renderer.js
+alwaysApply: false
+---
+
+# renderer.js
+
+Build pages as HTML strings, then assign `document.body.innerHTML`. Follow `renderFeedPage` and `buildPostHTML`. Do not introduce a virtual DOM or JSX.
+
+- Read listings from `{pathname}.json` with `credentials: 'include'`. Comment pages arrive as a two-item array.
+- Sidebar data comes from `/r/{name}/about.json`. Skip `all`, `popular`, and `friends`.
+- Writes go to `/api/vote`, `/api/save`, `/api/hide`, `/api/comment`, and `/api/submit` as form bodies. Send `uh` from `currentModhash` or `getCookie('csrf_token')`.
+- Thing ids are fullnames on `data-fullname` (`t3_`, `t1_`).
+- After feed, comment, or profile HTML is inserted, call `attachInteractiveListeners`.
+- `purgeShredditStyles` must not remove `#subreddit-custom-css`.
+
+```js
+// ❌ BAD — JSON body, anonymous request
+await fetch("/api/vote", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ id: fullname, dir }),
+});
+
+// ✅ GOOD — session cookie plus modhash
+const bodyParams = new URLSearchParams({ id: fullname, dir: String(dir), uh });
+await fetch("/api/vote", {
+  method: "POST",
+  headers: { "Content-Type": "application/x-www-form-urlencoded" },
+  credentials: "include",
+  body: bodyParams.toString(),
+});
+```

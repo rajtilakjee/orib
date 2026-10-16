@@ -1,2 +1,61 @@
 # ORIB
-_Bringing back old Reddit interface with new enhancements._
+
+Bringing back the old Reddit interface, with a few new enhancements.
+
+ORIB is a Manifest V3 browser extension. On `www.reddit.com` it replaces the current page with a classic layout: subreddit bar, blue header, ranked posts, sidebar, and threaded comments. It reads Reddit's public JSON listings and posts votes, saves, hides, comments, and submissions through Reddit's existing session.
+
+There is no build step and no package manager. Load the repository folder as an unpacked extension.
+
+## Install
+
+1. Open `chrome://extensions` (or the equivalent page in another Chromium browser).
+2. Turn on Developer mode.
+3. Choose **Load unpacked** and select this directory.
+4. Visit [reddit.com](https://www.reddit.com/). The page should show the classic layout after a short "loading classic reddit" state.
+
+The content script matches `*://www.reddit.com/*` and runs at `document_start`.
+
+## What it covers
+
+- Frontpage and subreddit listings, including hot, best, new, rising, controversial, and top
+- Comment threads, with collapse and inline reply
+- User profiles and `/saved`
+- A classic submit form at `/submit`
+- Subreddit sidebar (subscriber count, users online, public description, and the subreddit's own stylesheet)
+- Expando previews for self text, images, galleries, and Reddit-hosted video
+- Upvote, downvote, save, and hide while you are logged in
+- Keyboard navigation in the style of Reddit Enhancement Suite
+
+These paths stay on Reddit's own UI: `/chat`, `/settings`, `/poll`, `/mod`, and `/message`.
+
+## Keyboard shortcuts
+
+Shortcuts are ignored while focus is in an input, textarea, or content-editable element. Press `Shift+?` on a classic page for the in-page list.
+
+| Key | Action |
+| --- | --- |
+| `j` / `k` | Next / previous post or comment |
+| `Enter` | Open the selected title in a new tab |
+| `x` | Toggle the selected post's expando |
+| `Shift+X` | Toggle every expando |
+| `c` | Open the selected post's comments |
+| `a` / `z` | Upvote / downvote the selection |
+| `s` | Save the selected post |
+| `h` | Hide the selected post |
+
+## Project layout
+
+| File | Role |
+| --- | --- |
+| `manifest.json` | Extension manifest |
+| `renderer.js` | Routing, data fetch, HTML, and interactions |
+| `classic.css` | Classic visual system |
+| `icons/` | Toolbar icons |
+| `ARCHITECTURE.md` | Runtime flow and API usage |
+| `DESIGN.md` | Visual rules for the classic UI |
+| `AGENTS.md` | Notes for coding agents working in this repo |
+
+## Docs
+
+- [Architecture](ARCHITECTURE.md) — how a page is replaced and which endpoints are called
+- [Design](DESIGN.md) — colors, type, and layout that keep the UI looking like old Reddit

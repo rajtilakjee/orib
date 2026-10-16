@@ -1,0 +1,25 @@
+---
+description: Classic Reddit visual rules for classic.css
+globs: classic.css
+alwaysApply: false
+---
+
+# classic.css
+
+Match old Reddit. Details live in `DESIGN.md`.
+
+- Font: `verdana, arial, helvetica, sans-serif`. Body is 12px `#222222` on `#ffffff`.
+- Links and buttons: `#336699`. Header band: `#cee3f8` / `#5f99cf`. Selected tab text: `#ff4500`.
+- Upvote `#ff8b60`, downvote `#9494ff`, idle arrows `#c6c6c6`.
+- Reuse `.expando-button`, `.btn-classic`, `.thing`, `.midcol`, and `.side` before adding classes.
+- Keep the unnamed-`html` rules that hide `#classic-app` and the `#classic-loading` block. They stop the shreddit flash.
+- Do not add a dark theme, card shadows, or a larger type scale.
+- Leave subreddit CSS room to override decorative rules. Reserve `!important` for the ready/bypass gates and the existing vote and font locks.
+
+```css
+/* ❌ BAD */
+.thing { border-radius: 12px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12); }
+
+/* ✅ GOOD */
+.thing { display: flex; align-items: flex-start; margin-bottom: 8px; }
+```

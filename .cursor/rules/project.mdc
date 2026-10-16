@@ -1,0 +1,23 @@
+---
+description: Core constraints for the ORIB extension
+alwaysApply: true
+---
+
+# ORIB project
+
+ORIB is a Manifest V3 content script. `classic.css` and `renderer.js` are injected into `www.reddit.com` at `document_start`. There is no bundler, package manager, framework, or test runner.
+
+- Edit `renderer.js`, `classic.css`, and `manifest.json` in place.
+- Do not add dependencies or a build step for a small change.
+- Keep the UI on the old-Reddit system in `DESIGN.md`.
+- Route in `initClassicReddit`. Ready pages set `html` id `classic-reddit-ready`. Paths that must stay on Reddit (`/chat`, `/settings`, `/poll`, `/mod`, `/message`) set `classic-bypass` and return.
+- When committing, use Conventional Commits: `fix: keep subreddit css when purging styles`.
+
+```js
+// ❌ BAD — new stack for a content script
+import { h } from "preact";
+
+// ✅ GOOD — same pattern as the rest of renderer.js
+document.body.innerHTML = html;
+document.documentElement.id = "classic-reddit-ready";
+```
