@@ -4,13 +4,13 @@ Bringing back the old Reddit interface, with a few new enhancements.
 
 ORIB is a Manifest V3 browser extension. On `www.reddit.com` it replaces the current page with a classic layout: subreddit bar, blue header, ranked posts, sidebar, and threaded comments. It reads Reddit's public JSON listings and posts votes, saves, hides, comments, and submissions through Reddit's existing session.
 
-There is no build step and no package manager. Load the repository folder as an unpacked extension.
+The extension itself lives in `extension/`. Docs and the store listing stay outside that folder so they are not part of the upload.
 
 ## Install
 
 1. Open `chrome://extensions` (or the equivalent page in another Chromium browser).
 2. Turn on Developer mode.
-3. Choose **Load unpacked** and select this directory.
+3. Choose **Load unpacked** and select the `extension` directory.
 4. Visit [reddit.com](https://www.reddit.com/). The page should show the classic layout after a short "loading classic reddit" state.
 
 The content script matches `*://www.reddit.com/*` and runs at `document_start`.
@@ -43,14 +43,28 @@ Shortcuts are ignored while focus is in an input, textarea, or content-editable 
 | `s` | Save the selected post |
 | `h` | Hide the selected post |
 
+## Store package
+
+Version 0.1.0 is what gets submitted. From the repository root:
+
+```powershell
+powershell -File scripts/pack.ps1
+```
+
+That writes `dist/orib-0.1.0.zip`. The zip contains only `manifest.json`, `renderer.js`, `classic.css`, and `icons/`, with the manifest at the root of the archive. Upload that zip. Do not upload the git repository.
+
+The Chrome Web Store and Firefox Add-ons copy, plus the privacy policy, are in [store/LISTING.md](store/LISTING.md) and [store/PRIVACY.md](store/PRIVACY.md).
+
 ## Project layout
 
-| File | Role |
+| Path | Role |
 | --- | --- |
-| `manifest.json` | Extension manifest |
-| `renderer.js` | Routing, data fetch, HTML, and interactions |
-| `classic.css` | Classic visual system |
-| `icons/` | Toolbar icons |
+| `extension/manifest.json` | Extension manifest |
+| `extension/renderer.js` | Routing, data fetch, HTML, and interactions |
+| `extension/classic.css` | Classic visual system |
+| `extension/icons/` | Toolbar icons |
+| `scripts/pack.ps1` | Builds the store zip |
+| `store/` | Listing text and privacy policy |
 | `ARCHITECTURE.md` | Runtime flow and API usage |
 | `DESIGN.md` | Visual rules for the classic UI |
 | `AGENTS.md` | Notes for coding agents working in this repo |

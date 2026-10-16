@@ -3,6 +3,13 @@
   "name": "ORIB",
   "version": "0.1.0",
   "description": "Bringing back old Reddit interface with new enhancements.",
+  "homepage_url": "https://github.com/rajtilakjee/orib",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "orib@rajtilakjee.github.io",
+      "strict_min_version": "128.0"
+    }
+  },
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",

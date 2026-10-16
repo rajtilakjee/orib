@@ -1,6 +1,6 @@
 ---
 description: Classic Reddit visual rules for classic.css
-globs: classic.css
+globs: extension/classic.css
 alwaysApply: false
 ---
 

@@ -1,6 +1,6 @@
 # Architecture
 
-ORIB is a single content script. It does not use a background service worker, popup, bundler, or framework. `manifest.json` injects `classic.css` and `renderer.js` into `*://www.reddit.com/*` at `document_start`.
+ORIB is a single content script in the `extension/` directory. It does not use a background service worker, popup, bundler, or framework. `extension/manifest.json` injects `classic.css` and `renderer.js` into `*://www.reddit.com/*` at `document_start`. The store upload is a zip of that directory only.
 
 The script replaces `document.body` with classic HTML built from Reddit JSON. Reddit's own styles are removed so the new Reddit (shreddit) shell does not show through.
 

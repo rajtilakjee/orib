@@ -1,6 +1,6 @@
 ---
 description: How renderer.js fetches Reddit and writes classic HTML
-globs: renderer.js
+globs: extension/renderer.js
 alwaysApply: false
 ---
 

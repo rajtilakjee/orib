@@ -6,16 +6,18 @@ ORIB is a Manifest V3 content script that redraws `www.reddit.com` as old Reddit
 
 | Path | Touch it when |
 | --- | --- |
-| `manifest.json` | Host matches, script order, or a new permission is required |
-| `renderer.js` | Routing, fetching, HTML, votes, comments, keyboard |
-| `classic.css` | Visual changes |
-| `icons/` | Extension icons referenced by the manifest |
+| `extension/manifest.json` | Host matches, script order, version, or a new permission is required |
+| `extension/renderer.js` | Routing, fetching, HTML, votes, comments, keyboard |
+| `extension/classic.css` | Visual changes |
+| `extension/icons/` | Extension icons referenced by the manifest |
+| `scripts/pack.ps1` | What goes into the store zip |
+| `store/` | Listing copy and the privacy policy |
 
-There is no `package.json`, test runner, or build. Do not add one for a small change. Verify by loading the folder as an unpacked extension and exercising the route you changed.
+There is no `package.json` or test runner. Do not add one for a small change. The only package step is `scripts/pack.ps1`, and it must keep the manifest at the root of the zip. Verify by loading the `extension` folder as an unpacked extension and exercising the route you changed.
 
 ## Working agreement
 
-- Stay in vanilla JavaScript and one stylesheet. Render with HTML strings and `innerHTML`, matching the functions already in `renderer.js`.
+- Stay in vanilla JavaScript and one stylesheet. Render with HTML strings and `innerHTML`, matching the functions already in `extension/renderer.js`.
 - Put route decisions in `initClassicReddit`. A handled route sets `document.documentElement.id` to `classic-reddit-ready`. A route that must stay on Reddit's UI sets `classic-bypass` and returns without replacing the body.
 - Fetch Reddit with `credentials: 'include'`. Send writes as `application/x-www-form-urlencoded` and include `uh` from `currentModhash` or the `csrf_token` cookie.
 - Keep `#subreddit-custom-css` when purging styles. That element is the subreddit theme.
