@@ -47,10 +47,10 @@ let currentUserData = null;
 
   try {
     const mainPromise = fetch(jsonUrl, { credentials: 'include' }).then(r => r.json());
-    const sidebarPromise = subName 
+    const sidebarPromise = subName
       ? fetch(`${window.location.origin}/r/${subName}/about.json`, { credentials: 'include' })
-          .then(r => r.ok ? r.json() : null)
-          .catch(() => null)
+        .then(r => r.ok ? r.json() : null)
+        .catch(() => null)
       : Promise.resolve(null);
 
     const [rawData, subAbout] = await Promise.all([mainPromise, sidebarPromise]);
@@ -98,7 +98,7 @@ async function fetchRedditUser() {
         return data;
       }
     }
-  } catch (e) {}
+  } catch (e) { }
 
   const cachedName = localStorage.getItem('classic_reddit_username');
   if (cachedName) {
@@ -192,9 +192,9 @@ function getHeaderHTML() {
 function buildSidebarHTML(sub) {
   if (!sub) {
     return '<div class="side">' +
-             '<div class="spacer"><form action="/search" id="search"><input type="text" name="q" placeholder="search reddit"></form></div>' +
-             '<div class="spacer"><div class="titlebox"><h1 class="redditname"><a href="/">Frontpage</a></h1><p class="users-online">Classic Old Reddit UI Engine</p></div></div>' +
-           '</div>';
+      '<div class="spacer"><form action="/search" id="search"><input type="text" name="q" placeholder="search reddit"></form></div>' +
+      '<div class="spacer"><div class="titlebox"><h1 class="redditname"><a href="/">Frontpage</a></h1><p class="users-online">Classic Old Reddit UI Engine</p></div></div>' +
+      '</div>';
   }
 
   const descHTML = sub.description_html ? decodeHTML(sub.description_html) : '';
@@ -203,19 +203,19 @@ function buildSidebarHTML(sub) {
   const activeCount = (sub.accounts_active || 0).toLocaleString();
 
   return '<div class="side">' +
-           '<div class="spacer"><form action="/search" id="search"><input type="text" name="q" placeholder="search reddit"></form></div>' +
-           '<div class="spacer">' +
-             '<div class="titlebox">' +
-               '<h1 class="redditname"><a href="/r/' + sub.display_name + '">' + sub.display_name + '</a></h1>' +
-               '<div class="sub-stats">' +
-                 '<span class="subscribers"><span class="number">' + subsCount + '</span> readers</span>' +
-                 '<p class="users-online"><span class="online-dot">●</span> <span class="number">' + activeCount + '</span> users here now</p>' +
-               '</div>' +
-               pubDesc +
-               '<div class="usertext-body md-container">' + descHTML + '</div>' +
-             '</div>' +
-           '</div>' +
-         '</div>';
+    '<div class="spacer"><form action="/search" id="search"><input type="text" name="q" placeholder="search reddit"></form></div>' +
+    '<div class="spacer">' +
+    '<div class="titlebox">' +
+    '<h1 class="redditname"><a href="/r/' + sub.display_name + '">' + sub.display_name + '</a></h1>' +
+    '<div class="sub-stats">' +
+    '<span class="subscribers"><span class="number">' + subsCount + '</span> readers</span>' +
+    '<p class="users-online"><span class="online-dot">●</span> <span class="number">' + activeCount + '</span> users here now</p>' +
+    '</div>' +
+    pubDesc +
+    '<div class="usertext-body md-container">' + descHTML + '</div>' +
+    '</div>' +
+    '</div>' +
+    '</div>';
 }
 
 async function handleProfileOrSavedRoute(pathname) {
@@ -248,15 +248,15 @@ function renderProfilePage(pathname, children) {
   });
 
   let html = '<div id="classic-app">' +
-               getHeaderHTML() +
-               '<div class="main-layout">' +
-                 '<div class="content">' +
-                   '<div class="panestack-title">' + (isSaved ? 'your saved posts' : 'overview for ' + profileName) + '</div>' +
-                   '<div class="siteTable">' + (itemsHTML || '<p style="padding: 10px; color: #666;">No items found.</p>') + '</div>' +
-                 '</div>' +
-                 buildSidebarHTML(null) +
-               '</div>' +
-             '</div>';
+    getHeaderHTML() +
+    '<div class="main-layout">' +
+    '<div class="content">' +
+    '<div class="panestack-title">' + (isSaved ? 'your saved posts' : 'overview for ' + profileName) + '</div>' +
+    '<div class="siteTable">' + (itemsHTML || '<p style="padding: 10px; color: #666;">No items found.</p>') + '</div>' +
+    '</div>' +
+    buildSidebarHTML(null) +
+    '</div>' +
+    '</div>';
 
   document.body.innerHTML = html;
   attachInteractiveListeners();
@@ -264,12 +264,12 @@ function renderProfilePage(pathname, children) {
 
 function buildProfileCommentItem(c) {
   return '<div class="thing profile-comment-box" id="comment_' + c.name + '">' +
-           '<div class="entry" style="padding: 8px; border: 1px solid #e0e0e0; background: #fafafa; margin-bottom: 8px;">' +
-             '<p class="tagline"><a href="' + c.permalink + '" class="title-link" style="font-weight: bold; color: #336699;">in: ' + c.link_title + '</a> (r/' + c.subreddit + ')</p>' +
-             '<p class="tagline" style="margin-top: 4px;"><a href="/user/' + c.author + '" class="author">' + c.author + '</a> <span class="score">' + c.score + ' points</span> <span class="time">' + timeAgo(c.created_utc) + '</span></p>' +
-             '<div class="usertext-body" style="margin-top: 6px;">' + decodeHTML(c.body_html) + '</div>' +
-           '</div>' +
-         '</div>';
+    '<div class="entry" style="padding: 8px; border: 1px solid #e0e0e0; background: #fafafa; margin-bottom: 8px;">' +
+    '<p class="tagline"><a href="' + c.permalink + '" class="title-link" style="font-weight: bold; color: #336699;">in: ' + c.link_title + '</a> (r/' + c.subreddit + ')</p>' +
+    '<p class="tagline" style="margin-top: 4px;"><a href="/user/' + c.author + '" class="author">' + c.author + '</a> <span class="score">' + c.score + ' points</span> <span class="time">' + timeAgo(c.created_utc) + '</span></p>' +
+    '<div class="usertext-body" style="margin-top: 6px;">' + decodeHTML(c.body_html) + '</div>' +
+    '</div>' +
+    '</div>';
 }
 
 function renderFeedPage(listingData, sidebarData) {
@@ -295,15 +295,15 @@ function renderFeedPage(listingData, sidebarData) {
   }
 
   let html = '<div id="classic-app">' +
-               getHeaderHTML() +
-               '<div class="main-layout">' +
-                 '<div class="content">' +
-                   '<div class="siteTable">' + postsHTML + '</div>' +
-                   '<div class="nav-buttons"><span class="nextprev">view more: ' + prevLink + ' ' + nextLink + '</span></div>' +
-                 '</div>' +
-                 buildSidebarHTML(sidebarData) +
-               '</div>' +
-             '</div>';
+    getHeaderHTML() +
+    '<div class="main-layout">' +
+    '<div class="content">' +
+    '<div class="siteTable">' + postsHTML + '</div>' +
+    '<div class="nav-buttons"><span class="nextprev">view more: ' + prevLink + ' ' + nextLink + '</span></div>' +
+    '</div>' +
+    buildSidebarHTML(sidebarData) +
+    '</div>' +
+    '</div>';
 
   document.body.innerHTML = html;
   attachInteractiveListeners();
@@ -311,7 +311,7 @@ function renderFeedPage(listingData, sidebarData) {
 
 function buildPostHTML(post, rank, isCommentPage) {
   const voteClass = post.likes === true ? 'upvoted' : (post.likes === false ? 'downvoted' : 'unvoted');
-  
+
   let expandoContent = '';
   let hasExpando = false;
 
@@ -322,7 +322,7 @@ function buildPostHTML(post, rank, isCommentPage) {
     hasExpando = true;
     let galleryImages = '';
     const items = post.gallery_data?.items || [];
-    
+
     items.forEach((item, index) => {
       const mediaId = item.media_id;
       const meta = post.media_metadata[mediaId];
@@ -330,9 +330,9 @@ function buildPostHTML(post, rank, isCommentPage) {
         const imageUrl = meta.s.u ? meta.s.u.replace(/&amp;/g, '&') : '';
         if (imageUrl) {
           galleryImages += '<div class="gallery-slide" style="display: ' + (index === 0 ? 'block' : 'none') + ';" data-index="' + index + '">' +
-                             '<div class="gallery-counter">Image ' + (index + 1) + ' of ' + items.length + '</div>' +
-                             '<a href="' + imageUrl + '" target="_blank"><img class="expando-img" src="' + imageUrl + '" /></a>' +
-                           '</div>';
+            '<div class="gallery-counter">Image ' + (index + 1) + ' of ' + items.length + '</div>' +
+            '<a href="' + imageUrl + '" target="_blank"><img class="expando-img" src="' + imageUrl + '" /></a>' +
+            '</div>';
         }
       }
     });
@@ -348,9 +348,9 @@ function buildPostHTML(post, rank, isCommentPage) {
     const audioUrl = videoUrl.replace(/DASH_[0-9]+\.mp4/, 'DASH_AUDIO_128.mp4');
 
     expandoContent = '<div class="video-container">' +
-                       '<video controls preload="metadata" class="expando-video" id="video-' + post.id + '"><source src="' + videoUrl + '" type="video/mp4"></video>' +
-                       '<audio preload="metadata" id="audio-' + post.id + '" src="' + audioUrl + '"></audio>' +
-                     '</div>';
+      '<video controls preload="metadata" class="expando-video" id="video-' + post.id + '"><source src="' + videoUrl + '" type="video/mp4"></video>' +
+      '<audio preload="metadata" id="audio-' + post.id + '" src="' + audioUrl + '"></audio>' +
+      '</div>';
   } else {
     const isDirectImage = post.post_hint === 'image' || /\.(jpg|jpeg|png|gif|webp)\$/i.test(post.url);
     if (isDirectImage) {
@@ -361,7 +361,7 @@ function buildPostHTML(post, rank, isCommentPage) {
 
   const expandoBtn = hasExpando && !isCommentPage ? '<div class="expando-button" data-id="' + post.id + '" title="Toggle preview">[+]</div>' : '';
   const thumbUrl = (post.thumbnail && post.thumbnail.startsWith('http')) ? post.thumbnail : null;
-  
+
   let thumbHTML = '';
   if (post.over_18 && !thumbUrl) {
     thumbHTML = '<a class="thumbnail nsfw-thumb" href="' + post.permalink + '">18+</a>';
@@ -380,37 +380,37 @@ function buildPostHTML(post, rank, isCommentPage) {
   const targetUrl = post.is_self ? post.permalink : post.url;
 
   return '<div class="thing ' + stickiedClass + ' ' + nsfwClass + '" id="thing_' + post.name + '">' +
-           rankHTML +
-           '<div class="midcol ' + voteClass + '" data-score="' + post.score + '">' +
-             '<div class="arrow up" data-fullname="' + post.name + '" data-dir="1">▲</div>' +
-             '<div class="score">' + formatScore(post.score) + '</div>' +
-             '<div class="arrow down" data-fullname="' + post.name + '" data-dir="-1">▼</div>' +
-           '</div>' +
-           thumbHTML +
-           '<div class="entry">' +
-             '<p class="title">' +
-               nsfwBadge +
-               flairHTML +
-               '<a class="title-link" href="' + targetUrl + '">' + post.title + '</a>' +
-               '<span class="domain">(<a href="/domain/' + post.domain + '">' + post.domain + '</a>)</span>' +
-             '</p>' +
-             '<div class="sub-row">' +
-               expandoBtn +
-               '<div class="meta">' +
-                 '<p class="tagline">submitted ' + timeAgo(post.created_utc) + ' by <a href="/user/' + post.author + '" class="author">' + post.author + '</a> to <a href="/r/' + post.subreddit + '" class="subreddit">r/' + post.subreddit + '</a></p>' +
-                 '<ul class="flat-list buttons">' +
-                   '<li class="first"><a href="' + post.permalink + '" class="comments">' + post.num_comments + ' comments</a></li>' +
-                   '<li><a href="javascript:void(0)" class="share-button">share</a></li>' +
-                   '<li><a href="javascript:void(0)" class="save-button" data-fullname="' + post.name + '">save</a></li>' +
-                   '<li><a href="javascript:void(0)" class="hide-button" data-fullname="' + post.name + '">hide</a></li>' +
-                   '<li><a href="javascript:void(0)" class="report-button">report</a></li>' +
-                   '<li><a href="javascript:void(0)" class="crosspost-button">crosspost</a></li>' +
-                 '</ul>' +
-               '</div>' +
-             '</div>' +
-             '<div class="expando ' + (isCommentPage && expandoContent ? 'open' : '') + '" id="expando-' + post.id + '">' + expandoContent + '</div>' +
-           '</div>' +
-         '</div>';
+    rankHTML +
+    '<div class="midcol ' + voteClass + '" data-score="' + post.score + '">' +
+    '<div class="arrow up" data-fullname="' + post.name + '" data-dir="1">▲</div>' +
+    '<div class="score">' + formatScore(post.score) + '</div>' +
+    '<div class="arrow down" data-fullname="' + post.name + '" data-dir="-1">▼</div>' +
+    '</div>' +
+    thumbHTML +
+    '<div class="entry">' +
+    '<p class="title">' +
+    nsfwBadge +
+    flairHTML +
+    '<a class="title-link" href="' + targetUrl + '">' + post.title + '</a>' +
+    '<span class="domain">(<a href="/domain/' + post.domain + '">' + post.domain + '</a>)</span>' +
+    '</p>' +
+    '<div class="sub-row">' +
+    expandoBtn +
+    '<div class="meta">' +
+    '<p class="tagline">submitted ' + timeAgo(post.created_utc) + ' by <a href="/user/' + post.author + '" class="author">' + post.author + '</a> to <a href="/r/' + post.subreddit + '" class="subreddit">r/' + post.subreddit + '</a></p>' +
+    '<ul class="flat-list buttons">' +
+    '<li class="first"><a href="' + post.permalink + '" class="comments">' + post.num_comments + ' comments</a></li>' +
+    '<li><a href="javascript:void(0)" class="share-button">share</a></li>' +
+    '<li><a href="javascript:void(0)" class="save-button" data-fullname="' + post.name + '">save</a></li>' +
+    '<li><a href="javascript:void(0)" class="hide-button" data-fullname="' + post.name + '">hide</a></li>' +
+    '<li><a href="javascript:void(0)" class="report-button">report</a></li>' +
+    '<li><a href="javascript:void(0)" class="crosspost-button">crosspost</a></li>' +
+    '</ul>' +
+    '</div>' +
+    '</div>' +
+    '<div class="expando ' + (isCommentPage && expandoContent ? 'open' : '') + '" id="expando-' + post.id + '">' + expandoContent + '</div>' +
+    '</div>' +
+    '</div>';
 }
 
 function renderCommentPage(post, comments, sidebarData) {
@@ -420,18 +420,18 @@ function renderCommentPage(post, comments, sidebarData) {
   });
 
   let html = '<div id="classic-app">' +
-               getHeaderHTML() +
-               '<div class="main-layout">' +
-                 '<div class="content">' +
-                   '<div class="siteTable">' + buildPostHTML(post, null, true) + '</div>' +
-                   '<div class="commentarea">' +
-                     '<div class="panestack-title">all ' + post.num_comments + ' comments</div>' +
-                     '<div class="sitetable nestedlisting">' + commentsHTML + '</div>' +
-                   '</div>' +
-                 '</div>' +
-                 buildSidebarHTML(sidebarData) +
-               '</div>' +
-             '</div>';
+    getHeaderHTML() +
+    '<div class="main-layout">' +
+    '<div class="content">' +
+    '<div class="siteTable">' + buildPostHTML(post, null, true) + '</div>' +
+    '<div class="commentarea">' +
+    '<div class="panestack-title">all ' + post.num_comments + ' comments</div>' +
+    '<div class="sitetable nestedlisting">' + commentsHTML + '</div>' +
+    '</div>' +
+    '</div>' +
+    buildSidebarHTML(sidebarData) +
+    '</div>' +
+    '</div>';
   document.body.innerHTML = html;
   attachInteractiveListeners();
 }
@@ -445,7 +445,7 @@ function buildCommentTree(commentNode, postAuthor) {
 
   const voteClass = c.likes === true ? 'upvoted' : (c.likes === false ? 'downvoted' : 'unvoted');
   const isOP = c.author === postAuthor && postAuthor !== '[deleted]';
-  
+
   let repliesHTML = '';
   if (c.replies && c.replies.data && c.replies.data.children) {
     c.replies.data.children.forEach(child => {
@@ -457,46 +457,46 @@ function buildCommentTree(commentNode, postAuthor) {
   const opBadge = isOP ? '<span class="userattrs">[S]</span>' : '';
 
   return '<div class="comment" id="comment_' + c.name + '">' +
-           '<div class="midcol comment-votes ' + voteClass + '" data-score="' + c.score + '">' +
-             '<div class="arrow up" data-fullname="' + c.name + '" data-dir="1">▲</div>' +
-             '<div class="arrow down" data-fullname="' + c.name + '" data-dir="-1">▼</div>' +
-           '</div>' +
-           '<div class="entry">' +
-             '<p class="tagline">' +
-               '<a href="javascript:void(0)" class="expand">[–]</a>' +
-               '<a href="/user/' + c.author + '" class="' + authorClass + '">' + c.author + '</a>' +
-               opBadge +
-               '<span class="score">' + c.score + ' points</span>' +
-               '<span class="time">' + timeAgo(c.created_utc) + '</span>' +
-             '</p>' +
-             '<div class="comment-body">' +
-               '<div class="usertext-body">' + decodeHTML(c.body_html) + '</div>' +
-               '<ul class="flat-list buttons">' +
-                 '<li><a href="#comment_' + c.name + '">permalink</a></li>' +
-                 '<li><a href="javascript:void(0)" class="reply-button" data-fullname="' + c.name + '">reply</a></li>' +
-               '</ul>' +
-               '<div class="child">' + repliesHTML + '</div>' +
-             '</div>' +
-           '</div>' +
-         '</div>';
+    '<div class="midcol comment-votes ' + voteClass + '" data-score="' + c.score + '">' +
+    '<div class="arrow up" data-fullname="' + c.name + '" data-dir="1">▲</div>' +
+    '<div class="arrow down" data-fullname="' + c.name + '" data-dir="-1">▼</div>' +
+    '</div>' +
+    '<div class="entry">' +
+    '<p class="tagline">' +
+    '<a href="javascript:void(0)" class="expand">[–]</a>' +
+    '<a href="/user/' + c.author + '" class="' + authorClass + '">' + c.author + '</a>' +
+    opBadge +
+    '<span class="score">' + c.score + ' points</span>' +
+    '<span class="time">' + timeAgo(c.created_utc) + '</span>' +
+    '</p>' +
+    '<div class="comment-body">' +
+    '<div class="usertext-body">' + decodeHTML(c.body_html) + '</div>' +
+    '<ul class="flat-list buttons">' +
+    '<li><a href="#comment_' + c.name + '">permalink</a></li>' +
+    '<li><a href="javascript:void(0)" class="reply-button" data-fullname="' + c.name + '">reply</a></li>' +
+    '</ul>' +
+    '<div class="child">' + repliesHTML + '</div>' +
+    '</div>' +
+    '</div>' +
+    '</div>';
 }
 
 function renderSubmitPage() {
   const subName = getSubredditName() || '';
   const html = '<div id="classic-app">' +
-                 getHeaderHTML() +
-                 '<div class="main-layout">' +
-                   '<div class="content" style="padding: 15px;">' +
-                     '<div class="panestack-title">submit to reddit</div>' +
-                     '<div class="submit-form-container">' +
-                       '<div class="field-row"><label>Choose a subreddit:</label><input type="text" id="submit-sr" value="' + subName + '" placeholder="e.g. programming"></div>' +
-                       '<div class="field-row"><label>Title:</label><textarea id="submit-title" rows="2" placeholder="Post title"></textarea></div>' +
-                       '<div class="field-row"><label>Text (optional):</label><textarea id="submit-text" rows="10" placeholder="Markdown text body"></textarea></div>' +
-                       '<button type="button" id="submit-post-btn" class="btn-classic">Submit Post</button>' +
-                     '</div>' +
-                   '</div>' +
-                 '</div>' +
-               '</div>';
+    getHeaderHTML() +
+    '<div class="main-layout">' +
+    '<div class="content" style="padding: 15px;">' +
+    '<div class="panestack-title">submit to reddit</div>' +
+    '<div class="submit-form-container">' +
+    '<div class="field-row"><label>Choose a subreddit:</label><input type="text" id="submit-sr" value="' + subName + '" placeholder="e.g. programming"></div>' +
+    '<div class="field-row"><label>Title:</label><textarea id="submit-title" rows="2" placeholder="Post title"></textarea></div>' +
+    '<div class="field-row"><label>Text (optional):</label><textarea id="submit-text" rows="10" placeholder="Markdown text body"></textarea></div>' +
+    '<button type="button" id="submit-post-btn" class="btn-classic">Submit Post</button>' +
+    '</div>' +
+    '</div>' +
+    '</div>' +
+    '</div>';
 
   document.body.innerHTML = html;
   document.documentElement.id = "classic-reddit-ready";
@@ -566,7 +566,7 @@ function attachInteractiveListeners() {
       const editDiv = document.createElement('div');
       editDiv.className = 'usertext-edit';
       editDiv.innerHTML = '<textarea rows="5" cols="60" class="reply-textarea" placeholder="Write your reply..."></textarea>' +
-                          '<div class="usertext-buttons"><button type="button" class="save-reply">save</button><button type="button" class="cancel-reply">cancel</button></div>';
+        '<div class="usertext-buttons"><button type="button" class="save-reply">save</button><button type="button" class="cancel-reply">cancel</button></div>';
       entry.appendChild(editDiv);
 
       editDiv.querySelector('.cancel-reply').addEventListener('click', () => editDiv.remove());
@@ -645,15 +645,15 @@ function attachKeyboardShortcuts() {
     if (isShift && key === '?') {
       e.preventDefault();
       alert("Classic Reddit Keyboard Shortcuts:\n\n" +
-            "j / k: Next / Previous post or comment\n" +
-            "Enter: Open link or expand comment\n" +
-            "x: Toggle post expando\n" +
-            "Shift + x: Toggle all expandos\n" +
-            "c: Open comments\n" +
-            "a / z: Upvote / Downvote\n" +
-            "s: Save\n" +
-            "h: Hide post\n" +
-            "r: Reply to comment");
+        "j / k: Next / Previous post or comment\n" +
+        "Enter: Open link or expand comment\n" +
+        "x: Toggle post expando\n" +
+        "Shift + x: Toggle all expandos\n" +
+        "c: Open comments\n" +
+        "a / z: Upvote / Downvote\n" +
+        "s: Save\n" +
+        "h: Hide post\n" +
+        "r: Reply to comment");
       return;
     }
 
@@ -673,7 +673,7 @@ function attachKeyboardShortcuts() {
     if (key === 'j' || key === 'k') {
       e.preventDefault();
       if (currentIndex !== -1) currentItem.classList.remove('selected');
-      
+
       if (key === 'j') {
         currentIndex = Math.min(items.length - 1, currentIndex + 1);
       } else {
@@ -783,7 +783,7 @@ async function submitVote(fullname, dir) {
   }
 }
 
-window.plusGallerySlide = function(postId, n) {
+window.plusGallerySlide = function (postId, n) {
   const container = document.getElementById(`gallery-${postId}`);
   if (!container) return;
   const slides = container.querySelectorAll('.gallery-slide');
@@ -808,7 +808,7 @@ function attachVideoSyncListeners() {
     const audio = document.getElementById(audioId);
     if (!audio) return;
 
-    video.addEventListener('play', () => { audio.currentTime = video.currentTime; audio.play().catch(() => {}); });
+    video.addEventListener('play', () => { audio.currentTime = video.currentTime; audio.play().catch(() => { }); });
     video.addEventListener('pause', () => { audio.pause(); });
     video.addEventListener('seeking', () => { audio.currentTime = video.currentTime; });
     video.addEventListener('volumechange', () => { audio.volume = video.volume; audio.muted = video.muted; });
