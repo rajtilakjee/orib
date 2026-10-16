@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "Redditux",
+  "version": "1.0",
+  "description": "Reddit + Redux - Bring back old Reddit.",
+  "content_scripts": [
+    {
+      "matches": ["*://www.reddit.com/*"],
+      "css": ["classic.css"],
+      "js": ["renderer.js"],
+      "run_at": "document_start"
+    }
+  ]
+}

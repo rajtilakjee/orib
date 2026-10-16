@@ -1,0 +1,640 @@
+let currentModhash = null;
+
+(async function initClassicReddit() {
+  if (/^\/(chat|settings|poll|mod|message)/.test(window.location.pathname)) {
+    document.documentElement.id = "classic-bypass";
+    return;
+  }
+
+  window.addEventListener('popstate', () => location.reload());
+
+  // 1. Instantly wait for body and display the loading spinner
+  await waitForBody();
+  document.body.innerHTML = `<div id="classic-loading">loading classic reddit</div>`;
+
+  // Intercept Submission Page Route
+  if (window.location.pathname.startsWith('/submit')) {
+    purgeShredditStyles();
+    renderSubmitPage();
+    return;
+  }
+
+  // Intercept User Profiles & Saved Pages
+  const pathname = window.location.pathname;
+  if (pathname.startsWith('/user/') || pathname === '/saved') {
+    purgeShredditStyles();
+    await handleProfileOrSavedRoute(pathname);
+    return;
+  }
+
+  const path = pathname.replace(/\/\$/, '') || '/hot';
+  const jsonUrl = `${window.location.origin}${path}.json${window.location.search}`;
+  const subName = getSubredditName();
+
+  try {
+    const mainPromise = fetch(jsonUrl, { credentials: 'include' }).then(r => r.json());
+    const sidebarPromise = subName 
+      ? fetch(`${window.location.origin}/r/${subName}/about.json`, { credentials: 'include' })
+          .then(r => r.ok ? r.json() : null)
+          .catch(() => null)
+      : Promise.resolve(null);
+
+    const [rawData, subAbout] = await Promise.all([mainPromise, sidebarPromise]);
+    const sidebarData = subAbout?.data || null;
+
+    purgeShredditStyles();
+    injectSubredditCSS(sidebarData);
+    document.documentElement.id = "classic-reddit-ready";
+
+    if (Array.isArray(rawData)) {
+      currentModhash = rawData[0]?.data?.modhash || null;
+      renderCommentPage(rawData[0].data.children[0].data, rawData[1].data.children, sidebarData);
+    } else if (rawData?.data?.children) {
+      currentModhash = rawData.data.modhash || null;
+      renderFeedPage(rawData.data, sidebarData);
+    }
+  } catch (err) {
+    console.error("Classic Reddit Error:", err);
+    document.documentElement.id = "classic-bypass";
+  }
+})();
+
+function waitForBody() {
+  return new Promise(resolve => {
+    if (document.body) return resolve();
+    const checkInterval = setInterval(() => {
+      if (document.body) {
+        clearInterval(checkInterval);
+        resolve();
+      }
+    }, 5);
+  });
+}
+
+function purgeShredditStyles() {
+  document.head.querySelectorAll('link[rel="stylesheet"], style:not(#subreddit-custom-css)').forEach(el => el.remove());
+}
+
+function injectSubredditCSS(sub) {
+  const existingStyle = document.getElementById('subreddit-custom-css');
+  if (existingStyle) existingStyle.remove();
+
+  if (sub && sub.stylesheet) {
+    const styleEl = document.createElement('style');
+    styleEl.id = 'subreddit-custom-css';
+    styleEl.textContent = decodeHTML(sub.stylesheet);
+    document.head.appendChild(styleEl);
+  }
+}
+
+function getSubredditName() {
+  const parts = window.location.pathname.split('/').filter(Boolean);
+  if (parts[0] === 'r' && parts[1] && !['all', 'popular', 'friends'].includes(parts[1].toLowerCase())) {
+    return parts[1];
+  }
+  return null;
+}
+
+function getHeaderHTML() {
+  const parts = window.location.pathname.split('/').filter(Boolean);
+  const subName = parts[0] === 'r' && parts[1] ? parts[1] : 'FRONT';
+  const subLink = subName === 'FRONT' ? '/' : '/r/' + subName;
+  const currentSort = parts[2] || 'hot';
+
+  const isHot = currentSort === 'hot' ? 'selected' : '';
+  const isNew = currentSort === 'new' ? 'selected' : '';
+  const isRising = currentSort === 'rising' ? 'selected' : '';
+  const isTop = currentSort === 'top' ? 'selected' : '';
+
+  return '<div id="sr-header-area">' +
+           '<div class="sr-list">' +
+             '<a href="/">FRONT</a><span class="sep">-</span>' +
+             '<a href="/r/all">ALL</a><span class="sep">-</span>' +
+             '<a href="/r/popular">POPULAR</a><span class="sep">-</span>' +
+             '<a href="/saved">SAVED</a>' +
+           '</div>' +
+         '</div>' +
+         '<div id="header">' +
+           '<div id="header-bottom-left">' +
+             '<a id="header-img" href="/">reddit.com</a>' +
+             '<span class="pagename"><a href="' + subLink + '">' + subName + '</a></span>' +
+             '<ul class="tabmenu">' +
+               '<li class="' + isHot + '"><a href="' + subLink + '/hot">hot</a></li>' +
+               '<li class="' + isNew + '"><a href="' + subLink + '/new">new</a></li>' +
+               '<li class="' + isRising + '"><a href="' + subLink + '/rising">rising</a></li>' +
+               '<li class="' + isTop + '"><a href="' + subLink + '/top">top</a></li>' +
+             '</ul>' +
+           '</div>' +
+           '<div id="header-bottom-right">' +
+             '<a href="/submit" class="submit-link">submit a new link</a>' +
+           '</div>' +
+         '</div>';
+}
+
+function buildSidebarHTML(sub) {
+  if (!sub) {
+    return '<div class="side">' +
+             '<div class="spacer"><form action="/search" id="search"><input type="text" name="q" placeholder="search reddit"></form></div>' +
+             '<div class="spacer"><div class="titlebox"><h1 class="redditname"><a href="/">Frontpage</a></h1><p class="users-online">Classic Old Reddit UI Engine</p></div></div>' +
+           '</div>';
+  }
+
+  const descHTML = sub.description_html ? decodeHTML(sub.description_html) : '';
+  const pubDesc = sub.public_description ? '<div class="pub-desc">' + sub.public_description + '</div>' : '';
+  const subsCount = (sub.subscribers || 0).toLocaleString();
+  const activeCount = (sub.accounts_active || 0).toLocaleString();
+
+  return '<div class="side">' +
+           '<div class="spacer"><form action="/search" id="search"><input type="text" name="q" placeholder="search reddit"></form></div>' +
+           '<div class="spacer">' +
+             '<div class="titlebox">' +
+               '<h1 class="redditname"><a href="/r/' + sub.display_name + '">' + sub.display_name + '</a></h1>' +
+               '<div class="sub-stats">' +
+                 '<span class="subscribers"><span class="number">' + subsCount + '</span> readers</span>' +
+                 '<p class="users-online"><span class="online-dot">●</span> <span class="number">' + activeCount + '</span> users here now</p>' +
+               '</div>' +
+               pubDesc +
+               '<div class="usertext-body md-container">' + descHTML + '</div>' +
+             '</div>' +
+           '</div>' +
+         '</div>';
+}
+
+async function handleProfileOrSavedRoute(pathname) {
+  const jsonUrl = `${window.location.origin}${pathname}.json${window.location.search}`;
+
+  try {
+    const res = await fetch(jsonUrl, { credentials: 'include' });
+    const data = await res.json();
+    currentModhash = data?.data?.modhash || null;
+
+    document.documentElement.id = "classic-reddit-ready";
+    renderProfilePage(pathname, data.data.children);
+  } catch (err) {
+    console.error("Profile load error:", err);
+    document.documentElement.id = "classic-bypass";
+  }
+}
+
+function renderProfilePage(pathname, children) {
+  const isSaved = pathname === '/saved';
+  const profileName = isSaved ? 'saved items' : pathname.split('/')[2];
+
+  let itemsHTML = '';
+  children.forEach((item, idx) => {
+    if (item.kind === 't3') {
+      itemsHTML += buildPostHTML(item.data, idx + 1, false);
+    } else if (item.kind === 't1') {
+      itemsHTML += buildProfileCommentItem(item.data);
+    }
+  });
+
+  let html = '<div id="classic-app">' +
+               getHeaderHTML() +
+               '<div class="main-layout">' +
+                 '<div class="content">' +
+                   '<div class="panestack-title">' + (isSaved ? 'your saved posts' : 'overview for ' + profileName) + '</div>' +
+                   '<div class="siteTable">' + (itemsHTML || '<p style="padding: 10px; color: #666;">No items found.</p>') + '</div>' +
+                 '</div>' +
+                 buildSidebarHTML(null) +
+               '</div>' +
+             '</div>';
+
+  document.body.innerHTML = html;
+  attachInteractiveListeners();
+}
+
+function buildProfileCommentItem(c) {
+  return '<div class="thing profile-comment-box" id="comment_' + c.name + '">' +
+           '<div class="entry" style="padding: 8px; border: 1px solid #e0e0e0; background: #fafafa; margin-bottom: 8px;">' +
+             '<p class="tagline"><a href="' + c.permalink + '" class="title-link" style="font-weight: bold; color: #336699;">in: ' + c.link_title + '</a> (r/' + c.subreddit + ')</p>' +
+             '<p class="tagline" style="margin-top: 4px;"><a href="/user/' + c.author + '" class="author">' + c.author + '</a> <span class="score">' + c.score + ' points</span> <span class="time">' + timeAgo(c.created_utc) + '</span></p>' +
+             '<div class="usertext-body" style="margin-top: 6px;">' + decodeHTML(c.body_html) + '</div>' +
+           '</div>' +
+         '</div>';
+}
+
+function renderFeedPage(listingData, sidebarData) {
+  const posts = listingData.children;
+  const urlParams = new URLSearchParams(window.location.search);
+  const currentCount = parseInt(urlParams.get('count') || '0', 10);
+
+  let postsHTML = '';
+  posts.forEach((item, idx) => {
+    postsHTML += buildPostHTML(item.data, currentCount + idx + 1, false);
+  });
+
+  let prevLink = '';
+  if (listingData.before) {
+    const prevCount = Math.max(0, currentCount - 25);
+    prevLink = '<a class="prev-button" href="?count=' + prevCount + '&before=' + listingData.before + '">‹ prev</a>';
+  }
+
+  let nextLink = '';
+  if (listingData.after) {
+    const nextCount = currentCount + 25;
+    nextLink = '<a class="next-button" href="?count=' + nextCount + '&after=' + listingData.after + '">next ›</a>';
+  }
+
+  let html = '<div id="classic-app">' +
+               getHeaderHTML() +
+               '<div class="main-layout">' +
+                 '<div class="content">' +
+                   '<div class="siteTable">' + postsHTML + '</div>' +
+                   '<div class="nav-buttons"><span class="nextprev">view more: ' + prevLink + ' ' + nextLink + '</span></div>' +
+                 '</div>' +
+                 buildSidebarHTML(sidebarData) +
+               '</div>' +
+             '</div>';
+
+  document.body.innerHTML = html;
+  attachInteractiveListeners();
+}
+
+function buildPostHTML(post, rank, isCommentPage) {
+  const voteClass = post.likes === true ? 'upvoted' : (post.likes === false ? 'downvoted' : 'unvoted');
+  
+  let expandoContent = '';
+  let hasExpando = false;
+
+  if (post.selftext_html) {
+    hasExpando = true;
+    expandoContent = '<div class="usertext-body md-box">' + decodeHTML(post.selftext_html) + '</div>';
+  } else if (post.is_gallery && post.media_metadata) {
+    hasExpando = true;
+    let galleryImages = '';
+    const items = post.gallery_data?.items || [];
+    
+    items.forEach((item, index) => {
+      const mediaId = item.media_id;
+      const meta = post.media_metadata[mediaId];
+      if (meta && meta.s) {
+        const imageUrl = meta.s.u ? meta.s.u.replace(/&amp;/g, '&') : '';
+        if (imageUrl) {
+          galleryImages += '<div class="gallery-slide" style="display: ' + (index === 0 ? 'block' : 'none') + ';" data-index="' + index + '">' +
+                             '<div class="gallery-counter">Image ' + (index + 1) + ' of ' + items.length + '</div>' +
+                             '<a href="' + imageUrl + '" target="_blank"><img class="expando-img" src="' + imageUrl + '" /></a>' +
+                           '</div>';
+        }
+      }
+    });
+
+    if (galleryImages) {
+      expandoContent = '<div class="gallery-container" id="gallery-' + post.id + '">' + galleryImages +
+        (items.length > 1 ? '<div class="gallery-controls"><button class="gallery-prev" onclick="plusGallerySlide(\'' + post.id + '\', -1)">‹ Prev</button><button class="gallery-next" onclick="plusGallerySlide(\'' + post.id + '\', 1)">Next ›</button></div>' : '') +
+        '</div>';
+    }
+  } else if (post.is_video && post.media?.reddit_video) {
+    hasExpando = true;
+    const videoUrl = post.media.reddit_video.fallback_url;
+    const audioUrl = videoUrl.replace(/DASH_[0-9]+\.mp4/, 'DASH_AUDIO_128.mp4');
+
+    expandoContent = '<div class="video-container">' +
+                       '<video controls preload="metadata" class="expando-video" id="video-' + post.id + '"><source src="' + videoUrl + '" type="video/mp4"></video>' +
+                       '<audio preload="metadata" id="audio-' + post.id + '" src="' + audioUrl + '"></audio>' +
+                     '</div>';
+  } else {
+    const isDirectImage = post.post_hint === 'image' || /\.(jpg|jpeg|png|gif|webp)\$/i.test(post.url);
+    if (isDirectImage) {
+      hasExpando = true;
+      expandoContent = '<a href="' + post.url + '" target="_blank"><img class="expando-img" src="' + post.url + '" /></a>';
+    }
+  }
+
+  const expandoBtn = hasExpando && !isCommentPage ? '<div class="expando-button" data-id="' + post.id + '" title="Toggle preview">[+]</div>' : '';
+  const thumbUrl = (post.thumbnail && post.thumbnail.startsWith('http')) ? post.thumbnail : null;
+  const thumbHTML = thumbUrl 
+    ? '<a class="thumbnail" href="' + (post.is_self ? post.permalink : post.url) + '"><img src="' + thumbUrl + '" width="70" height="50" alt=""></a>'
+    : '<a class="thumbnail default-thumb" href="' + post.permalink + '">' + (post.is_self ? 'self' : 'link') + '</a>';
+
+  const flairHTML = post.link_flair_text ? '<span class="linkflairlabel">' + post.link_flair_text + '</span>' : '';
+  const rankHTML = rank ? '<span class="rank">' + rank + '</span>' : '';
+  const stickiedClass = post.stickied ? 'stickied' : '';
+  const targetUrl = post.is_self ? post.permalink : post.url;
+
+  return '<div class="thing ' + stickiedClass + '" id="thing_' + post.name + '">' +
+           rankHTML +
+           '<div class="midcol ' + voteClass + '" data-score="' + post.score + '">' +
+             '<div class="arrow up" data-fullname="' + post.name + '" data-dir="1">▲</div>' +
+             '<div class="score">' + formatScore(post.score) + '</div>' +
+             '<div class="arrow down" data-fullname="' + post.name + '" data-dir="-1">▼</div>' +
+           '</div>' +
+           thumbHTML +
+           '<div class="entry">' +
+             '<p class="title">' +
+               flairHTML +
+               '<a class="title-link" href="' + targetUrl + '">' + post.title + '</a>' +
+               '<span class="domain">(<a href="/domain/' + post.domain + '">' + post.domain + '</a>)</span>' +
+             '</p>' +
+             '<div class="sub-row">' +
+               expandoBtn +
+               '<div class="meta">' +
+                 '<p class="tagline">submitted ' + timeAgo(post.created_utc) + ' by <a href="/user/' + post.author + '" class="author">' + post.author + '</a> to <a href="/r/' + post.subreddit + '" class="subreddit">r/' + post.subreddit + '</a></p>' +
+                 '<ul class="flat-list buttons">' +
+                   '<li class="first"><a href="' + post.permalink + '" class="comments">' + post.num_comments + ' comments</a></li>' +
+                   '<li><a href="' + post.url + '" target="_blank">share</a></li>' +
+                 '</ul>' +
+               '</div>' +
+             '</div>' +
+             '<div class="expando ' + (isCommentPage && expandoContent ? 'open' : '') + '" id="expando-' + post.id + '">' + expandoContent + '</div>' +
+           '</div>' +
+         '</div>';
+}
+
+function renderCommentPage(post, comments, sidebarData) {
+  let commentsHTML = '';
+  comments.forEach(c => {
+    commentsHTML += buildCommentTree(c, post.author);
+  });
+
+  let html = '<div id="classic-app">' +
+               getHeaderHTML() +
+               '<div class="main-layout">' +
+                 '<div class="content">' +
+                   '<div class="siteTable">' + buildPostHTML(post, null, true) + '</div>' +
+                   '<div class="commentarea">' +
+                     '<div class="panestack-title">all ' + post.num_comments + ' comments</div>' +
+                     '<div class="sitetable nestedlisting">' + commentsHTML + '</div>' +
+                   '</div>' +
+                 '</div>' +
+                 buildSidebarHTML(sidebarData) +
+               '</div>' +
+             '</div>';
+  document.body.innerHTML = html;
+  attachInteractiveListeners();
+}
+
+function buildCommentTree(commentNode, postAuthor) {
+  if (commentNode.kind === 'more') {
+    return '<div class="morecomments">load more comments (' + commentNode.data.count + ' replies)</div>';
+  }
+  const c = commentNode.data;
+  if (!c || !c.body_html) return '';
+
+  const voteClass = c.likes === true ? 'upvoted' : (c.likes === false ? 'downvoted' : 'unvoted');
+  const isOP = c.author === postAuthor && postAuthor !== '[deleted]';
+  
+  let repliesHTML = '';
+  if (c.replies && c.replies.data && c.replies.data.children) {
+    c.replies.data.children.forEach(child => {
+      repliesHTML += buildCommentTree(child, postAuthor);
+    });
+  }
+
+  const authorClass = isOP ? 'author submitter' : 'author';
+  const opBadge = isOP ? '<span class="userattrs">[S]</span>' : '';
+
+  return '<div class="comment" id="comment_' + c.name + '">' +
+           '<div class="midcol comment-votes ' + voteClass + '" data-score="' + c.score + '">' +
+             '<div class="arrow up" data-fullname="' + c.name + '" data-dir="1">▲</div>' +
+             '<div class="arrow down" data-fullname="' + c.name + '" data-dir="-1">▼</div>' +
+           '</div>' +
+           '<div class="entry">' +
+             '<p class="tagline">' +
+               '<a href="javascript:void(0)" class="expand">[–]</a>' +
+               '<a href="/user/' + c.author + '" class="' + authorClass + '">' + c.author + '</a>' +
+               opBadge +
+               '<span class="score">' + c.score + ' points</span>' +
+               '<span class="time">' + timeAgo(c.created_utc) + '</span>' +
+             '</p>' +
+             '<div class="comment-body">' +
+               '<div class="usertext-body">' + decodeHTML(c.body_html) + '</div>' +
+               '<ul class="flat-list buttons">' +
+                 '<li><a href="#comment_' + c.name + '">permalink</a></li>' +
+                 '<li><a href="javascript:void(0)" class="reply-button" data-fullname="' + c.name + '">reply</a></li>' +
+               '</ul>' +
+               '<div class="child">' + repliesHTML + '</div>' +
+             '</div>' +
+           '</div>' +
+         '</div>';
+}
+
+function renderSubmitPage() {
+  const subName = getSubredditName() || '';
+  const html = '<div id="classic-app">' +
+                 getHeaderHTML() +
+                 '<div class="main-layout">' +
+                   '<div class="content" style="padding: 15px;">' +
+                     '<div class="panestack-title">submit to reddit</div>' +
+                     '<div class="submit-form-container">' +
+                       '<div class="field-row"><label>Choose a subreddit:</label><input type="text" id="submit-sr" value="' + subName + '" placeholder="e.g. programming"></div>' +
+                       '<div class="field-row"><label>Title:</label><textarea id="submit-title" rows="2" placeholder="Post title"></textarea></div>' +
+                       '<div class="field-row"><label>Text (optional):</label><textarea id="submit-text" rows="10" placeholder="Markdown text body"></textarea></div>' +
+                       '<button type="button" id="submit-post-btn" class="btn-classic">Submit Post</button>' +
+                     '</div>' +
+                   '</div>' +
+                 '</div>' +
+               '</div>';
+
+  document.body.innerHTML = html;
+  document.documentElement.id = "classic-reddit-ready";
+
+  document.getElementById('submit-post-btn').addEventListener('click', async () => {
+    const sr = document.getElementById('submit-sr').value.trim();
+    const title = document.getElementById('submit-title').value.trim();
+    const text = document.getElementById('submit-text').value.trim();
+
+    if (!sr || !title) {
+      alert('Please fill out the subreddit and title fields.');
+      return;
+    }
+
+    const uh = currentModhash || getCookie('csrf_token');
+    const bodyParams = new URLSearchParams({
+      api_type: 'json',
+      kind: text ? 'self' : 'link',
+      sr: sr,
+      title: title,
+      text: text || '',
+      uh: uh
+    });
+
+    try {
+      const res = await fetch('/api/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        credentials: 'include',
+        body: bodyParams.toString()
+      });
+      const data = await res.json();
+      if (data.json && data.json.errors.length === 0) {
+        window.location.href = data.json.data.url;
+      } else {
+        alert('Submission error: ' + JSON.stringify(data.json.errors));
+      }
+    } catch (err) {
+      console.error('Post submission failed:', err);
+    }
+  });
+}
+
+function attachInteractiveListeners() {
+  document.querySelectorAll('.expando-button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const target = document.getElementById(`expando-${btn.dataset.id}`);
+      const isOpen = target.classList.toggle('open');
+      btn.textContent = isOpen ? '[-]' : '[+]';
+    });
+  });
+
+  document.querySelectorAll('.comment .expand').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const comment = e.target.closest('.comment');
+      const isCollapsed = comment.classList.toggle('collapsed');
+      e.target.textContent = isCollapsed ? '[+]' : '[–]';
+    });
+  });
+
+  document.querySelectorAll('.reply-button').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const entry = e.target.closest('.entry');
+      if (entry.querySelector('.usertext-edit')) return;
+      const parentFullname = btn.dataset.fullname;
+
+      const editDiv = document.createElement('div');
+      editDiv.className = 'usertext-edit';
+      editDiv.innerHTML = '<textarea rows="5" cols="60" class="reply-textarea" placeholder="Write your reply..."></textarea>' +
+                          '<div class="usertext-buttons"><button type="button" class="save-reply">save</button><button type="button" class="cancel-reply">cancel</button></div>';
+      entry.appendChild(editDiv);
+
+      editDiv.querySelector('.cancel-reply').addEventListener('click', () => editDiv.remove());
+      editDiv.querySelector('.save-reply').addEventListener('click', async () => {
+        const textarea = editDiv.querySelector('.reply-textarea');
+        const text = textarea.value.trim();
+        if (!text) return;
+        textarea.disabled = true;
+        const success = await sendCommentAPI(parentFullname, text);
+        if (success) location.reload();
+        else { alert('Failed to post comment.'); textarea.disabled = false; }
+      });
+    });
+  });
+
+  document.querySelectorAll('.arrow').forEach(arrow => {
+    arrow.addEventListener('click', async () => {
+      const midcol = arrow.closest('.midcol');
+      const fullname = arrow.dataset.fullname;
+      const clickedDir = parseInt(arrow.dataset.dir, 10);
+
+      const isCurrentlyUp = midcol.classList.contains('upvoted');
+      const isCurrentlyDown = midcol.classList.contains('downvoted');
+      let finalDir = clickedDir;
+
+      if ((clickedDir === 1 && isCurrentlyUp) || (clickedDir === -1 && isCurrentlyDown)) finalDir = 0;
+
+      midcol.classList.remove('upvoted', 'downvoted', 'unvoted');
+      midcol.classList.add(finalDir === 1 ? 'upvoted' : (finalDir === -1 ? 'downvoted' : 'unvoted'));
+
+      const scoreEl = midcol.querySelector('.score');
+      if (scoreEl) {
+        const baseScore = parseInt(midcol.dataset.score || '0', 10);
+        scoreEl.textContent = formatScore(baseScore + finalDir);
+      }
+
+      await submitVote(fullname, finalDir);
+    });
+  });
+
+  attachVideoSyncListeners();
+}
+
+async function sendCommentAPI(thingId, text) {
+  const uh = currentModhash || getCookie('csrf_token');
+  if (!uh) return false;
+
+  const bodyParams = new URLSearchParams();
+  bodyParams.append('api_type', 'json');
+  bodyParams.append('thing_id', thingId);
+  bodyParams.append('text', text);
+  bodyParams.append('uh', uh);
+
+  try {
+    const res = await fetch(`${window.location.origin}/api/comment`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      credentials: 'include',
+      body: bodyParams.toString()
+    });
+    const data = await res.json();
+    return !data.json.errors.length;
+  } catch (err) {
+    return false;
+  }
+}
+
+async function submitVote(fullname, dir) {
+  const uh = currentModhash || getCookie('csrf_token');
+  if (!uh) return;
+
+  const bodyParams = new URLSearchParams();
+  bodyParams.append('id', fullname);
+  bodyParams.append('dir', dir.toString());
+  bodyParams.append('uh', uh);
+  bodyParams.append('api_type', 'json');
+
+  try {
+    await fetch(`${window.location.origin}/api/vote`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      credentials: 'include',
+      body: bodyParams.toString()
+    });
+  } catch (err) {
+    console.error("Failed to submit vote:", err);
+  }
+}
+
+window.plusGallerySlide = function(postId, n) {
+  const container = document.getElementById(`gallery-${postId}`);
+  if (!container) return;
+  const slides = container.querySelectorAll('.gallery-slide');
+  let currentIndex = 0;
+
+  slides.forEach((slide, idx) => {
+    if (slide.style.display === 'block') currentIndex = idx;
+    slide.style.display = 'none';
+  });
+
+  let newIndex = currentIndex + n;
+  if (newIndex >= slides.length) newIndex = 0;
+  if (newIndex < 0) newIndex = slides.length - 1;
+
+  slides[newIndex].style.display = 'block';
+};
+
+function attachVideoSyncListeners() {
+  document.querySelectorAll('video.expando-video').forEach(video => {
+    const videoId = video.id;
+    const audioId = videoId.replace('video-', 'audio-');
+    const audio = document.getElementById(audioId);
+    if (!audio) return;
+
+    video.addEventListener('play', () => { audio.currentTime = video.currentTime; audio.play().catch(() => {}); });
+    video.addEventListener('pause', () => { audio.pause(); });
+    video.addEventListener('seeking', () => { audio.currentTime = video.currentTime; });
+    video.addEventListener('volumechange', () => { audio.volume = video.volume; audio.muted = video.muted; });
+  });
+}
+
+function getCookie(name) {
+  const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+  return match ? match[2] : null;
+}
+
+function decodeHTML(html) {
+  const txt = document.createElement('textarea');
+  txt.innerHTML = html;
+  return txt.value;
+}
+
+function formatScore(s) {
+  return s >= 10000 ? (s / 1000).toFixed(1) + 'k' : s;
+}
+
+function timeAgo(utc) {
+  const diff = Math.floor(Date.now() / 1000 - utc);
+  if (diff < 60) return `just now`;
+  if (diff < 3600) return `${Math.floor(diff / 60)} minutes ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)} hours ago`;
+  return `${Math.floor(diff / 86400)} days ago`;
+}
