@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ORIB",
-  "version": "0.3.0",
+  "version": "0.2.0",
   "description": "Bringing back old Reddit interface with new enhancements.",
   "homepage_url": "https://github.com/rajtilakjee/orib",
   "browser_specific_settings": {
