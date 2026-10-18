@@ -1,6 +1,6 @@
 # ORIB privacy policy
 
-ORIB is a browser extension that redraws `www.reddit.com` with a classic layout. Version 0.1.0.
+ORIB is a browser extension that redraws `www.reddit.com` with a classic layout. Version 0.2.0.
 
 ## What it can see
 

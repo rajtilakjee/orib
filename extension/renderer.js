@@ -278,6 +278,7 @@ function renderMediaPage(mediaUrl) {
     '</div>' +
     buildSidebarHTML(null) +
     '</div></div>';
+  applyUserTags();
 }
 
 function getSubredditName() {
@@ -735,6 +736,7 @@ function renderSubmitPage() {
   document.documentElement.id = "classic-reddit-ready";
   attachSubmitListeners(isSelf);
   loadSubscribedSubreddits();
+  applyUserTags();
 }
 
 function buildSubmitSidebarHTML() {
@@ -1015,7 +1017,184 @@ async function submitClassicPost(isSelf) {
   }
 }
 
+const USER_TAG_KEY = 'orib_user_tags';
+const TAG_COLORS = ['#ffffaa', '#ff8b60', '#ff4500', '#cc0000', '#228822', '#336699', '#0055df', '#551a8b', '#eeeeee', '#222222'];
+
+function loadUserTags() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(USER_TAG_KEY) || '{}');
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function saveUserTags(tags) {
+  localStorage.setItem(USER_TAG_KEY, JSON.stringify(tags));
+}
+
+function usernameFromLink(anchor) {
+  const match = (anchor.getAttribute('href') || '').match(/\/user\/([^/?#]+)/i);
+  if (!match) return null;
+  let name = match[1];
+  try { name = decodeURIComponent(name); } catch (e) { /* keep the raw segment */ }
+  if (!name || name === '[deleted]' || name.toLowerCase() === 'login') return null;
+  return name;
+}
+
+function colorChannels(color) {
+  const probe = document.createElement('span');
+  probe.style.color = color;
+  document.body.appendChild(probe);
+  const computed = getComputedStyle(probe).color;
+  probe.remove();
+  const match = computed.match(/(\d+),\s*(\d+),\s*(\d+)/);
+  if (!match) return null;
+  return [Number(match[1]), Number(match[2]), Number(match[3])];
+}
+
+function tagTextColor(color) {
+  const channels = colorChannels(color);
+  if (!channels) return '#222222';
+  const luminance = (0.299 * channels[0] + 0.587 * channels[1] + 0.114 * channels[2]) / 255;
+  return luminance > 0.62 ? '#222222' : '#ffffff';
+}
+
+function colorToHex(color) {
+  const channels = color ? colorChannels(color) : null;
+  if (!channels) return '#ffffaa';
+  return '#' + channels.map(channel => channel.toString(16).padStart(2, '0')).join('');
+}
+
+function applyUserTags() {
+  const tags = loadUserTags();
+  document.querySelectorAll('a.author, .user-user a').forEach(anchor => {
+    if (anchor.dataset.oribTagged) return;
+    const name = usernameFromLink(anchor);
+    if (!name) return;
+    anchor.dataset.oribTagged = '1';
+    const wrap = document.createElement('span');
+    wrap.className = 'orib-user-tag-wrap';
+    wrap.dataset.username = name;
+    anchor.after(wrap);
+    fillUserTagWrap(wrap, tags[name.toLowerCase()] || null);
+  });
+}
+
+function refreshUserTags() {
+  document.querySelectorAll('.orib-user-tag-wrap, .orib-tag-editor').forEach(el => el.remove());
+  document.querySelectorAll('[data-orib-tagged]').forEach(el => delete el.dataset.oribTagged);
+  applyUserTags();
+}
+
+function fillUserTagWrap(wrap, tag) {
+  const name = wrap.dataset.username;
+  const hasText = !!(tag && tag.text);
+  const hasWeight = tag && tag.voteWeight !== null && tag.voteWeight !== undefined && tag.voteWeight !== '' && !Number.isNaN(Number(tag.voteWeight));
+
+  if (hasText) {
+    const label = document.createElement(tag.link ? 'a' : 'span');
+    label.className = 'orib-user-tag';
+    label.textContent = tag.text;
+    if (tag.color) {
+      label.style.backgroundColor = tag.color;
+      label.style.color = tagTextColor(tag.color);
+    }
+    if (tag.link) label.href = tag.link;
+    const bits = [];
+    if (hasWeight) bits.push('vote weight: ' + tag.voteWeight);
+    if (tag.link) bits.push(tag.link);
+    if (bits.length) label.title = bits.join('\n');
+    wrap.appendChild(label);
+  }
+
+  if (hasWeight) {
+    const weight = document.createElement('span');
+    weight.className = 'orib-vote-weight';
+    weight.textContent = String(tag.voteWeight);
+    weight.title = 'vote weight';
+    wrap.appendChild(weight);
+  }
+
+  const edit = document.createElement('a');
+  edit.href = 'javascript:void(0)';
+  edit.className = 'orib-tag-open';
+  edit.textContent = 'tag';
+  edit.title = 'Tag this user. Only you can see it.';
+  edit.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    openTagEditor(wrap, name);
+  });
+  wrap.appendChild(edit);
+}
+
+function openTagEditor(wrap, name) {
+  document.querySelectorAll('.orib-tag-editor').forEach(el => el.remove());
+  const existing = loadUserTags()[name.toLowerCase()] || {};
+  const editor = document.createElement('div');
+  editor.className = 'orib-tag-editor';
+  editor.innerHTML = '<div class="orib-tag-editor-title">tag user: ' + escapeHTML(name) + '</div>' +
+    '<label>tag<input type="text" class="orib-tag-text" maxlength="100"></label>' +
+    '<label>color <input type="color" class="orib-tag-color"></label>' +
+    '<div class="orib-tag-swatches"></div>' +
+    '<label>vote weight<input type="number" class="orib-tag-weight" step="1"></label>' +
+    '<label>url<input type="url" class="orib-tag-link"></label>' +
+    '<div class="orib-tag-actions">' +
+    '<button type="button" class="btn-classic orib-tag-save">save</button>' +
+    '<button type="button" class="btn-classic orib-tag-delete">delete</button>' +
+    '<button type="button" class="btn-classic orib-tag-cancel">cancel</button>' +
+    '</div>';
+  const anchorPoint = wrap.closest('p.tagline, .user-user') || wrap;
+  anchorPoint.insertAdjacentElement('afterend', editor);
+
+  const colorInput = editor.querySelector('.orib-tag-color');
+  editor.querySelector('.orib-tag-text').value = existing.text || '';
+  colorInput.value = colorToHex(existing.color);
+  editor.querySelector('.orib-tag-weight').value = existing.voteWeight ?? '';
+  editor.querySelector('.orib-tag-link').value = existing.link || location.href;
+
+  const swatches = editor.querySelector('.orib-tag-swatches');
+  TAG_COLORS.forEach(color => {
+    const swatch = document.createElement('button');
+    swatch.type = 'button';
+    swatch.style.backgroundColor = color;
+    swatch.title = color;
+    swatch.addEventListener('click', () => { colorInput.value = color; });
+    swatches.appendChild(swatch);
+  });
+
+  editor.querySelector('.orib-tag-save').addEventListener('click', () => {
+    const tags = loadUserTags();
+    const text = editor.querySelector('.orib-tag-text').value.trim();
+    const weightRaw = editor.querySelector('.orib-tag-weight').value.trim();
+    const link = editor.querySelector('.orib-tag-link').value.trim();
+    if (!text && weightRaw === '') {
+      delete tags[name.toLowerCase()];
+    } else {
+      tags[name.toLowerCase()] = {
+        text: text,
+        color: colorInput.value,
+        voteWeight: weightRaw === '' ? null : Number(weightRaw),
+        link: link
+      };
+    }
+    saveUserTags(tags);
+    refreshUserTags();
+  });
+
+  editor.querySelector('.orib-tag-delete').addEventListener('click', () => {
+    const tags = loadUserTags();
+    delete tags[name.toLowerCase()];
+    saveUserTags(tags);
+    refreshUserTags();
+  });
+
+  editor.querySelector('.orib-tag-cancel').addEventListener('click', () => editor.remove());
+}
+
 function attachInteractiveListeners() {
+  applyUserTags();
   document.querySelectorAll('.expando-button').forEach(btn => {
     btn.addEventListener('click', () => {
       const target = document.getElementById(`expando-${btn.dataset.id}`);

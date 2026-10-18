@@ -45,13 +45,13 @@ Shortcuts are ignored while focus is in an input, textarea, or content-editable 
 
 ## Store package
 
-Version 0.1.0 is what gets submitted. From the repository root:
+Version 0.2.0 is what gets submitted. From the repository root:
 
 ```powershell
 powershell -File scripts/pack.ps1
 ```
 
-That writes `dist/orib-0.1.0.zip`. The zip contains only `manifest.json`, `renderer.js`, `classic.css`, and `icons/`, with the manifest at the root of the archive. Upload that zip. Do not upload the git repository.
+That writes `dist/orib-0.2.0.zip`. The zip contains only `manifest.json`, `renderer.js`, `classic.css`, and `icons/`, with the manifest at the root of the archive. Upload that zip. Do not upload the git repository.
 
 The Chrome Web Store and Firefox Add-ons copy, plus the privacy policy, are in [store/LISTING.md](store/LISTING.md) and [store/PRIVACY.md](store/PRIVACY.md).
 

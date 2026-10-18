@@ -1,6 +1,6 @@
 # Store listing
 
-Use this when submitting version 0.1.0. The upload is the zip from `scripts/pack.ps1`, not the git repository.
+Use this when submitting version 0.2.0. The upload is the zip from `scripts/pack.ps1`, not the git repository.
 
 ## Chrome Web Store
 
@@ -31,4 +31,4 @@ The extension handles the signed-in Reddit username and the votes, saves, hides,
 
 ## Firefox Add-ons
 
-The same zip can be uploaded. The manifest includes `browser_specific_settings.gecko.id` (`orib@rajtilakjee.github.io`) and requires Firefox 128 or newer. Use the same description and privacy policy URL.
+The same zip can be uploaded. The manifest includes `browser_specific_settings.gecko.id` (`orib@rajtilakjee.github.io`), requires Firefox 140 or newer, and declares `data_collection_permissions` (`"required": ["none"]`). Use the same description and privacy policy URL.
