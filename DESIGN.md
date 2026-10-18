@@ -42,7 +42,7 @@ Buttons are flat: `#f0f3fc` fill, `#c6d4f0` border, `#336699` label, bold 11px. 
 The page is a column, then a row.
 
 1. `#sr-header-area` is an 18px gray bar. "my subreddits" is a dropdown on the left. Subscribed subreddits follow, separated by hyphens, and "edit »" stays at the right.
-2. `#header` is the blue band. Sort tabs sit on the bottom left, with the subreddit or user name beside them when the page has one. The front page has no wordmark. The selected tab is white with an orange label and covers the bottom border. Username, post karma, messages, preferences, and logout sit in `#header-bottom-right`. Logged-out visitors see "Want to join? Log in or sign up in seconds." Submit links are the sidebar `.morelink` buttons.
+2. `#header` is the blue band. `.orib-wordmark` (“ORIB”) sits at the bottom left, then the subreddit or user name when the page has one, then the sort tabs. The front page opens on **best**. The selected tab is white with an orange label and covers the bottom border. Username, post karma, messages, preferences, and logout sit in `#header-bottom-right`. Logged-out visitors see "Want to join? Log in or sign up in seconds." Submit links are the sidebar `.morelink` buttons.
 3. `.main-layout` is a flex row with 10px padding and a 15px gap. `.content` grows. `.side` is a fixed 300px column.
 
 A post (`.thing`) is a flex row:

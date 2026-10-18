@@ -175,7 +175,8 @@ function buildListingUrl(pathname, search) {
     return `${location.origin}${base}.json${search || ''}`;
   }
   if (postId) return `${location.origin}/comments/${postId}.json${search || ''}`;
-  if (path === '/' || path === '/hot') return `${location.origin}/hot.json${search || ''}`;
+  if (path === '/' || path === '/best') return `${location.origin}/best.json${search || ''}`;
+  if (path === '/hot') return `${location.origin}/hot.json${search || ''}`;
   return `${location.origin}${path}.json${search || ''}`;
 }
 
@@ -299,14 +300,6 @@ const LOGGED_OUT_SUBREDDITS = [
 let cachedSubredditBar = null;
 let subredditBarPromise = null;
 
-function headerLogoHTML(sub) {
-  const headerImg = sub && sub.header_img;
-  if (headerImg && /^https?:\/\//i.test(headerImg)) {
-    return '<a id="header-img-a" href="/"><img id="header-img" class="custom-header" referrerpolicy="no-referrer" alt="" src="' + escapeHTML(cleanUrl(headerImg)) + '"></a>';
-  }
-  return '';
-}
-
 function headerPageName(parts) {
   if (parts[0] === 'r' && parts[1]) return { text: parts[1], href: '/r/' + encodeURIComponent(parts[1]) };
   if (parts[0] === 'user' && parts[1]) return { text: parts[1], href: '/user/' + encodeURIComponent(parts[1]) };
@@ -336,16 +329,16 @@ function headerTabItems(parts, onSubmit) {
   if (parts[0] === 'saved') return [];
 
   const inSub = parts[0] === 'r' && parts[1];
-  const sort = ((inSub ? parts[2] : parts[0]) || 'hot').toLowerCase();
-  const selected = ['new', 'rising', 'controversial', 'top', 'gilded', 'wiki'].includes(sort)
-    ? sort
-    : (sort === 'hot' || sort === '' ? 'hot' : '');
+  const named = ['best', 'hot', 'new', 'rising', 'controversial', 'top', 'wiki'];
+  const raw = ((inSub ? parts[2] : parts[0]) || '').toLowerCase();
+  const selected = named.includes(raw) ? raw : (raw ? '' : (inSub ? 'hot' : 'best'));
   const base = inSub ? '/r/' + encodeURIComponent(parts[1]) : '';
-  return ['hot', 'new', 'rising', 'controversial', 'top', 'gilded', 'wiki'].map((label) => ({
-    label: label,
-    href: label === 'hot' ? (base || '/') : base + '/' + label,
-    selected: selected === label
-  }));
+  return named.map((label) => {
+    let href = base + '/' + label;
+    if (!inSub && label === 'best') href = '/';
+    if (!inSub && label === 'hot') href = '/hot';
+    return { label: label, href: href, selected: selected === label };
+  });
 }
 
 function headerUserHTML() {
@@ -396,7 +389,7 @@ function getHeaderHTML(options) {
     '</div></div>' +
     '<div id="header">' +
     '<div id="header-bottom-left">' +
-    headerLogoHTML(options && options.sub) +
+    '<a class="orib-wordmark" href="/">ORIB</a>' +
     pageHTML +
     '<ul class="tabmenu">' + tabs + '</ul>' +
     '</div>' +
@@ -407,10 +400,20 @@ function getHeaderHTML(options) {
 function renderSubredditBar(names) {
   const bar = document.getElementById('sr-bar');
   if (!bar) return;
-  bar.innerHTML = names.map((name, index) => {
-    const sep = index ? '<li class="separator">-</li>' : '';
-    return sep + '<li><a href="/r/' + encodeURIComponent(name) + '">' + escapeHTML(name) + '</a></li>';
-  }).join('');
+  const prefix = [
+    ['home', '/'],
+    ['popular', '/r/popular'],
+    ['all', '/r/all'],
+    ['mod', '/r/mod'],
+    ['users', '/r/users']
+  ];
+  const skip = new Set(prefix.map((item) => item[0]));
+  const items = prefix.map(([label, href]) => '<li><a href="' + href + '">' + label + '</a></li>');
+  names.forEach((name) => {
+    if (skip.has(String(name).toLowerCase())) return;
+    items.push('<li><a href="/r/' + encodeURIComponent(name) + '">' + escapeHTML(name) + '</a></li>');
+  });
+  bar.innerHTML = items.join('<li class="separator">-</li>');
 }
 
 function fillSubredditBar() {

@@ -1,6 +1,6 @@
 # Store listing
 
-Use this when submitting version 0.2.0. The upload is the zip from `scripts/pack.ps1`, not the git repository.
+Use this when submitting version 0.3.0. The upload is the zip from `scripts/pack.ps1`, not the git repository.
 
 ## Chrome Web Store
 

@@ -197,11 +197,20 @@ html#classic-reddit-ready body {
   padding: 4px 280px 0 8px;
 }
 
-#header-img.custom-header {
-  display: block;
-  max-height: 80px;
-  max-width: 300px;
-  margin: 0 8px 0 4px;
+.orib-wordmark {
+  flex: 0 0 auto;
+  margin: 0 12px 2px 2px;
+  color: #222222;
+  font-size: 22px;
+  font-weight: bold;
+  line-height: 1;
+  letter-spacing: -0.4px;
+  text-decoration: none;
+}
+
+.orib-wordmark:hover {
+  color: #222222;
+  text-decoration: none;
 }
 
 .pagename {
