@@ -278,6 +278,7 @@ function renderMediaPage(mediaUrl) {
     '</div>' +
     buildSidebarHTML(null) +
     '</div></div>';
+  mountClassicHeader();
   applyUserTags();
 }
 
@@ -289,74 +290,183 @@ function getSubredditName() {
   return null;
 }
 
+const LOGGED_OUT_SUBREDDITS = [
+  'popular', 'all', 'random', 'AskReddit', 'pics', 'funny', 'todayilearned',
+  'worldnews', 'videos', 'news', 'gaming', 'movies', 'aww', 'mildlyinteresting',
+  'science', 'books', 'television', 'technology', 'music', 'sports'
+];
+
+let cachedSubredditBar = null;
+let subredditBarPromise = null;
+
+function headerLogoHTML(sub) {
+  const headerImg = sub && sub.header_img;
+  if (headerImg && /^https?:\/\//i.test(headerImg)) {
+    return '<a id="header-img-a" href="/"><img id="header-img" class="custom-header" referrerpolicy="no-referrer" alt="" src="' + escapeHTML(cleanUrl(headerImg)) + '"></a>';
+  }
+  return '';
+}
+
+function headerPageName(parts) {
+  if (parts[0] === 'r' && parts[1]) return { text: parts[1], href: '/r/' + encodeURIComponent(parts[1]) };
+  if (parts[0] === 'user' && parts[1]) return { text: parts[1], href: '/user/' + encodeURIComponent(parts[1]) };
+  if (parts[0] === 'saved') return { text: 'saved', href: '/saved' };
+  return null;
+}
+
+function headerTabItems(parts, onSubmit) {
+  if (onSubmit) {
+    const base = parts[0] === 'r' && parts[1] ? '/r/' + encodeURIComponent(parts[1]) + '/submit' : '/submit';
+    return [{ label: 'submit', href: base, selected: true }];
+  }
+  if (parts[0] === 'user' && parts[1]) {
+    const base = '/user/' + encodeURIComponent(parts[1]);
+    const section = (parts[2] || '').toLowerCase();
+    return [
+      ['', 'overview'],
+      ['comments', 'comments'],
+      ['submitted', 'submitted'],
+      ['gilded', 'gilded']
+    ].map(([key, label]) => ({
+      label: label,
+      href: key ? base + '/' + key : base,
+      selected: key ? section === key : (!section || section === 'overview')
+    }));
+  }
+  if (parts[0] === 'saved') return [];
+
+  const inSub = parts[0] === 'r' && parts[1];
+  const sort = ((inSub ? parts[2] : parts[0]) || 'hot').toLowerCase();
+  const selected = ['new', 'rising', 'controversial', 'top', 'gilded', 'wiki'].includes(sort)
+    ? sort
+    : (sort === 'hot' || sort === '' ? 'hot' : '');
+  const base = inSub ? '/r/' + encodeURIComponent(parts[1]) : '';
+  return ['hot', 'new', 'rising', 'controversial', 'top', 'gilded', 'wiki'].map((label) => ({
+    label: label,
+    href: label === 'hot' ? (base || '/') : base + '/' + label,
+    selected: selected === label
+  }));
+}
+
+function headerUserHTML() {
+  if (!currentUserData || !currentUserData.name) {
+    return '<span class="user">Want to join? <a href="/login" class="login-required">Log in or sign up</a> in seconds.</span>';
+  }
+  const name = currentUserData.name;
+  const karma = currentUserData.link_karma != null
+    ? currentUserData.link_karma
+    : (currentUserData.total_karma || 0);
+  return '<span class="user"><span class="user-user"><a href="/user/' + encodeURIComponent(name) + '">' + escapeHTML(name) + '</a></span>' +
+    '<span class="userkarma" title="post karma">(' + Number(karma || 0).toLocaleString() + ')</span></span>' +
+    '<span class="separator">|</span>' +
+    '<a id="mail" class="nohavemail" href="/message/inbox/" title="no new mail"><span class="mail-icon" aria-hidden="true"></span>messages</a>' +
+    '<span class="separator">|</span>' +
+    '<a href="/prefs/">preferences</a>' +
+    '<span class="separator">|</span>' +
+    '<a href="/logout">logout</a>';
+}
+
 function getHeaderHTML(options) {
   const onSubmit = !!(options && options.submit);
   const parts = window.location.pathname.split('/').filter(Boolean);
-  const subName = parts[0] === 'r' && parts[1] ? parts[1] : 'HOME';
-  const subLink = subName === 'HOME' ? '/' : '/r/' + subName;
-  const currentSort = parts[2] || parts[0] || 'hot';
+  const page = headerPageName(parts);
+  const pageHTML = page
+    ? '<span class="pagename redditname"><a href="' + page.href + '">' + escapeHTML(page.text) + '</a></span>'
+    : '';
+  const tabs = headerTabItems(parts, onSubmit).map((tab) =>
+    '<li class="' + (tab.selected ? 'selected' : '') + '"><a href="' + tab.href + '">' + tab.label + '</a></li>'
+  ).join('');
 
-  const isBest = currentSort === 'best' ? 'selected' : '';
-  const isHot = currentSort === 'hot' || currentSort === '' ? 'selected' : '';
-  const isNew = currentSort === 'new' ? 'selected' : '';
-  const isRising = currentSort === 'rising' ? 'selected' : '';
-  const isControversial = currentSort === 'controversial' ? 'selected' : '';
-  const isTop = currentSort === 'top' ? 'selected' : '';
-  const isWiki = currentSort === 'wiki' ? 'selected' : '';
+  return '<div id="sr-header-area">' +
+    '<div class="width-clip">' +
+    '<div class="dropdown srdrop" id="sr-drop">' +
+    '<span class="selected" role="button" tabindex="0">my subreddits</span>' +
+    '<div class="drop-choices">' +
+    '<a href="/">home</a>' +
+    '<a href="/r/popular">popular</a>' +
+    '<a href="/r/all">all</a>' +
+    '<a href="/r/random">random</a>' +
+    '<a href="/r/users">users</a>' +
+    '<a href="/r/friends">friends</a>' +
+    '<a href="/saved">saved</a>' +
+    '<a href="/subreddits/">edit subscriptions</a>' +
+    '</div></div>' +
+    '<div class="sr-list"><span class="separator">-</span><ul class="sr-bar" id="sr-bar"></ul></div>' +
+    '<a class="sr-more-link" href="/subreddits/">edit »</a>' +
+    '</div></div>' +
+    '<div id="header">' +
+    '<div id="header-bottom-left">' +
+    headerLogoHTML(options && options.sub) +
+    pageHTML +
+    '<ul class="tabmenu">' + tabs + '</ul>' +
+    '</div>' +
+    '<div id="header-bottom-right">' + headerUserHTML() + '</div>' +
+    '</div>';
+}
 
-  const username = currentUserData?.name || 'login';
-  const karmaTotal = currentUserData
-    ? (currentUserData.total_karma ?? ((currentUserData.link_karma || 0) + (currentUserData.comment_karma || 0)))
-    : 0;
-  const totalKarma = Number(karmaTotal || 0).toLocaleString();
-  const userLink = currentUserData ? `/user/${username}` : '/login';
-  const submitBase = subName === 'HOME' ? '/submit' : `/r/${subName}/submit`;
+function renderSubredditBar(names) {
+  const bar = document.getElementById('sr-bar');
+  if (!bar) return;
+  bar.innerHTML = names.map((name, index) => {
+    const sep = index ? '<li class="separator">-</li>' : '';
+    return sep + '<li><a href="/r/' + encodeURIComponent(name) + '">' + escapeHTML(name) + '</a></li>';
+  }).join('');
+}
 
-  return `
-    <div id="sr-header-area">
-      <div class="sr-list">
-        <span class="dropdown-title">MY SUBREDDITS</span><span class="sep">-</span>
-        <a href="/">HOME</a><span class="sep">-</span>
-        <a href="/r/popular">POPULAR</a><span class="sep">-</span>
-        <a href="/r/all">ALL</a><span class="sep">-</span>
-        <a href="/saved">SAVED</a>
-      </div>
-      <div class="user-header-right">
-        <span class="user-user"><a href="${userLink}">${username}</a></span>
-        <span class="user-karma" title="link and comment karma">(${totalKarma})</span>
-        <a href="/message/inbox/" id="mail-count" class="mail" title="Messages">✉</a>
-        <span class="separator">|</span>
-        <a href="https://www.reddit.com/prefs/">preferences</a>
-        <span class="separator">|</span>
-        <a href="https://www.reddit.com/logout">logout</a>
-      </div>
-    </div>
-    <div id="header">
-      <div id="header-bottom-left">
-        <a id="header-img" href="/">reddit</a>
-        <ul class="tabmenu">
-          ${onSubmit
-            ? `<li class="selected"><a href="${submitBase}">submit</a></li>`
-            : `<li class="${isBest}"><a href="${subLink === '/' ? '/best' : subLink + '/best'}">best</a></li>
-          <li class="${isHot}"><a href="${subLink === '/' ? '/' : subLink + '/hot'}">hot</a></li>
-          <li class="${isNew}"><a href="${subLink === '/' ? '/new' : subLink + '/new'}">new</a></li>
-          <li class="${isRising}"><a href="${subLink === '/' ? '/rising' : subLink + '/rising'}">rising</a></li>
-          <li class="${isControversial}"><a href="${subLink === '/' ? '/controversial' : subLink + '/controversial'}">controversial</a></li>
-          <li class="${isTop}"><a href="${subLink === '/' ? '/top' : subLink + '/top'}">top</a></li>
-          <li class="${isWiki}"><a href="${subLink === '/' ? '/wiki' : subLink + '/wiki'}">wiki</a></li>`}
-        </ul>
-      </div>
-      ${onSubmit ? '' : `<div id="header-bottom-right">
-        <a href="${submitBase}" class="pref-lang">Submit a new link</a>
-        <a href="${submitBase}?selftext=true" class="pref-lang">Submit a new text post</a>
-      </div>`}
-    </div>
-  `;
+function fillSubredditBar() {
+  if (!document.getElementById('sr-bar')) return;
+  if (!currentUserData) {
+    renderSubredditBar(LOGGED_OUT_SUBREDDITS);
+    return;
+  }
+  if (cachedSubredditBar) {
+    renderSubredditBar(cachedSubredditBar);
+    return;
+  }
+  if (!subredditBarPromise) {
+    subredditBarPromise = fetch('/subreddits/mine/subscriber.json?limit=100&raw_json=1', { credentials: 'include' })
+      .then((res) => res.ok ? res.json() : null)
+      .then((data) => {
+        const names = (data?.data?.children || []).map((item) => item?.data?.display_name).filter(Boolean);
+        cachedSubredditBar = names.length ? names : LOGGED_OUT_SUBREDDITS;
+        return cachedSubredditBar;
+      })
+      .catch(() => LOGGED_OUT_SUBREDDITS);
+  }
+  subredditBarPromise.then((names) => renderSubredditBar(names || LOGGED_OUT_SUBREDDITS));
+}
+
+function mountClassicHeader() {
+  const drop = document.getElementById('sr-drop');
+  if (drop && !drop.dataset.bound) {
+    drop.dataset.bound = '1';
+    drop.querySelector('.selected').addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      drop.classList.toggle('open');
+    });
+  }
+  if (!window.__oribSrDoc) {
+    window.__oribSrDoc = true;
+    document.addEventListener('click', () => {
+      const open = document.getElementById('sr-drop');
+      if (open) open.classList.remove('open');
+    });
+  }
+  fillSubredditBar();
+}
+
+function submitSideboxHTML() {
+  const parts = window.location.pathname.split('/').filter(Boolean);
+  const base = parts[0] === 'r' && parts[1] ? '/r/' + encodeURIComponent(parts[1]) + '/submit' : '/submit';
+  return '<div class="spacer"><div class="morelink"><a href="' + base + '">Submit a new link</a><div class="nub"></div></div></div>' +
+    '<div class="spacer"><div class="morelink"><a href="' + base + '?selftext=true">Submit a new text post</a><div class="nub"></div></div></div>';
 }
 
 function buildSidebarHTML(sub) {
   if (!sub) {
     return '<div class="side">' +
+      submitSideboxHTML() +
       '<div class="spacer"><form action="/search" id="search"><input type="text" name="q" placeholder="search reddit"></form></div>' +
       '<div class="spacer"><div class="titlebox"><h1 class="redditname"><a href="/">Frontpage</a></h1><p class="users-online">Classic Old Reddit UI Engine</p></div></div>' +
       '</div>';
@@ -368,6 +478,7 @@ function buildSidebarHTML(sub) {
   const activeCount = (sub.accounts_active || 0).toLocaleString();
 
   return '<div class="side">' +
+    submitSideboxHTML() +
     '<div class="spacer"><form action="/search" id="search"><input type="text" name="q" placeholder="search reddit"></form></div>' +
     '<div class="spacer">' +
     '<div class="titlebox">' +
@@ -467,7 +578,7 @@ function renderFeedPage(listingData, sidebarData) {
   }
 
   let html = '<div id="classic-app">' +
-    getHeaderHTML() +
+    getHeaderHTML({ sub: sidebarData }) +
     '<div class="main-layout">' +
     '<div class="content">' +
     '<div class="siteTable">' + postsHTML + '</div>' +
@@ -597,7 +708,7 @@ function renderCommentPage(post, comments, sidebarData) {
   });
 
   let html = '<div id="classic-app">' +
-    getHeaderHTML() +
+    getHeaderHTML({ sub: sidebarData }) +
     '<div class="main-layout">' +
     '<div class="content">' +
     '<div class="siteTable">' + buildPostHTML(post, null, true) + '</div>' +
@@ -736,11 +847,13 @@ function renderSubmitPage() {
   document.documentElement.id = "classic-reddit-ready";
   attachSubmitListeners(isSelf);
   loadSubscribedSubreddits();
+  mountClassicHeader();
   applyUserTags();
 }
 
 function buildSubmitSidebarHTML() {
   return '<div class="side">' +
+    submitSideboxHTML() +
     '<div class="spacer"><form action="/search" id="search"><input type="text" name="q" placeholder="search reddit"></form></div>' +
     '<div class="account-activity"><a href="https://www.reddit.com/account-activity">account activity</a></div>' +
     '</div>';
@@ -1194,6 +1307,7 @@ function openTagEditor(wrap, name) {
 }
 
 function attachInteractiveListeners() {
+  mountClassicHeader();
   applyUserTags();
   document.querySelectorAll('.expando-button').forEach(btn => {
     btn.addEventListener('click', () => {

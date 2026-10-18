@@ -56,85 +56,175 @@ html#classic-reddit-ready body {
 
 #sr-header-area {
   background-color: #f0f0f0;
-  border-bottom: 1px solid #cccccc;
-  padding: 4px 10px;
-  font-size: 9px;
+  border-bottom: 1px solid #808080;
+  font-size: 10px;
+  line-height: 18px;
+  height: 18px;
   text-transform: uppercase;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  color: #555;
+  color: #555555;
   white-space: nowrap;
-  overflow: hidden;
+  position: relative;
+  z-index: 100;
+}
+
+#sr-header-area .width-clip {
+  display: flex;
+  align-items: center;
+  height: 18px;
 }
 
 #sr-header-area a {
   color: #336699;
   text-decoration: none;
+  font-weight: bold;
 }
 
 #sr-header-area a:hover {
   text-decoration: underline;
 }
 
-#sr-header-area .sep {
-  margin: 0 4px;
-  color: #aaa;
+#sr-header-area .separator,
+#sr-header-area .sr-bar li.separator {
+  color: #888888;
+  font-weight: normal;
+  margin: 0 3px;
 }
 
-.user-header-right {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 10px;
+.dropdown.srdrop {
+  position: relative;
+  flex: 0 0 auto;
+  margin-left: 4px;
+  z-index: 120;
+}
+
+.dropdown.srdrop .selected {
+  display: inline-block;
+  position: relative;
+  background: #ffffff;
+  border: 1px solid #cccccc;
+  color: #888888;
+  font-weight: bold;
+  font-size: 9px;
+  line-height: 14px;
+  height: 14px;
+  padding: 0 14px 0 4px;
+  cursor: pointer;
+}
+
+.dropdown.srdrop .selected::after {
+  content: "";
+  position: absolute;
+  right: 4px;
+  top: 5px;
+  border-left: 3px solid transparent;
+  border-right: 3px solid transparent;
+  border-top: 4px solid #888888;
+}
+
+.dropdown.srdrop .drop-choices {
+  display: none;
+  position: absolute;
+  top: 16px;
+  left: 0;
+  min-width: 150px;
+  background: #ffffff;
+  border: 1px solid #cccccc;
+  padding: 2px 0;
+  text-transform: none;
+  z-index: 200;
+}
+
+.dropdown.srdrop.open .drop-choices {
+  display: block;
+}
+
+.dropdown.srdrop .drop-choices a {
+  display: block;
+  padding: 1px 8px;
+  font-size: 11px;
+  font-weight: bold;
   text-transform: none;
 }
 
-.user-header-right .user-user a {
-  font-weight: bold;
-  color: #336699;
-}
-
-.user-header-right .user-karma {
-  color: #888;
-}
-
-.user-header-right .mail {
-  color: #c00;
-  font-size: 13px;
+.dropdown.srdrop .drop-choices a:hover {
+  background: #336699;
+  color: #ffffff;
   text-decoration: none;
 }
 
-.user-header-right .separator {
-  color: #ccc;
+.sr-list {
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  height: 18px;
+}
+
+#sr-header-area .sr-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+#sr-header-area .sr-bar li {
+  display: inline;
+  font-weight: bold;
+  white-space: nowrap;
+}
+
+.sr-more-link {
+  flex: 0 0 auto;
+  margin: 0 6px;
 }
 
 #header {
   background-color: #cee3f8;
   border-bottom: 1px solid #5f99cf;
-  padding: 12px 10px 0 10px;
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
+  position: relative;
+  z-index: 50;
+  padding-top: 2px;
 }
 
 #header-bottom-left {
   display: flex;
   align-items: flex-end;
+  min-height: 28px;
+  padding: 4px 280px 0 8px;
 }
 
-#header-img {
-  font-size: 18px;
+#header-img.custom-header {
+  display: block;
+  max-height: 80px;
+  max-width: 300px;
+  margin: 0 8px 0 4px;
+}
+
+.pagename {
+  flex: 0 0 auto;
+  margin: 0 10px 4px 0;
+  font-size: 17px;
   font-weight: bold;
-  color: #222222;
+  line-height: 1;
+}
+
+.pagename a {
+  color: #000000;
   text-decoration: none;
-  margin-right: 12px;
-  padding-bottom: 4px;
+}
+
+.pagename a:hover {
+  text-decoration: underline;
 }
 
 .tabmenu {
   list-style: none;
   display: flex;
+  align-items: flex-end;
   margin: 0;
   padding: 0;
   gap: 3px;
@@ -144,10 +234,12 @@ html#classic-reddit-ready body {
   display: inline-block;
   background-color: #eff7ff;
   color: #336699;
-  padding: 2px 6px 0 6px;
+  padding: 2px 6px 1px;
   font-weight: bold;
   font-size: 12px;
+  line-height: 16px;
   text-decoration: none;
+  border: 1px solid transparent;
 }
 
 .tabmenu li.selected a {
@@ -155,29 +247,58 @@ html#classic-reddit-ready body {
   color: #ff4500;
   border: 1px solid #5f99cf;
   border-bottom: 1px solid #ffffff;
-  margin-bottom: -1px;
+  position: relative;
+  top: 1px;
+  z-index: 2;
 }
 
 #header-bottom-right {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding-bottom: 6px;
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  background-color: #eff7ff;
+  padding: 4px 8px;
+  font-size: 10px;
+  line-height: 14px;
+  white-space: nowrap;
+  z-index: 3;
 }
 
-.pref-lang {
-  background-color: #eff7ff;
-  border: 1px solid #5f99cf;
-  color: #336699 !important;
+#header-bottom-right a {
+  color: #336699;
   font-weight: bold;
-  font-size: 11px;
-  padding: 3px 8px;
+  font-size: 10px;
   text-decoration: none;
 }
 
-.pref-lang:hover {
-  background-color: #336699;
-  color: #ffffff !important;
+#header-bottom-right a:hover {
+  text-decoration: underline;
+}
+
+#header-bottom-right .userkarma {
+  color: #888888;
+  font-weight: normal;
+  margin-left: 1px;
+}
+
+#header-bottom-right .separator {
+  color: #888888;
+  font-weight: normal;
+  margin: 0 4px;
+}
+
+#mail .mail-icon {
+  display: inline-block;
+  width: 12px;
+  height: 9px;
+  margin-right: 3px;
+  vertical-align: -1px;
+  border: 1px solid #888888;
+  background:
+    linear-gradient(to bottom right, transparent 46%, #9a9a9a 49%, #9a9a9a 51%, transparent 54%),
+    linear-gradient(to bottom left, transparent 46%, #9a9a9a 49%, #9a9a9a 51%, transparent 54%),
+    #e4e4e4;
+  box-sizing: border-box;
 }
 
 .main-layout {
@@ -550,6 +671,47 @@ html#classic-reddit-ready body {
 
 .side .spacer {
   margin-bottom: 10px;
+}
+
+.morelink {
+  position: relative;
+  background: #ffffff;
+  border: 1px solid #c6d4f0;
+  border-radius: 3px;
+  text-align: center;
+}
+
+.morelink a {
+  display: block;
+  padding: 4px 12px 5px;
+  color: #336699;
+  font-weight: bold;
+  font-size: 15px;
+  text-decoration: none;
+}
+
+.morelink a:hover {
+  text-decoration: underline;
+}
+
+.morelink .nub {
+  position: absolute;
+  left: 50%;
+  bottom: -6px;
+  margin-left: -6px;
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 6px solid #c6d4f0;
+}
+
+#header-bottom-right .orib-tag-editor {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  white-space: normal;
+  text-align: left;
 }
 
 #search input[type="text"] {
